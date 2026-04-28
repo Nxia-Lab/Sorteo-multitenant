@@ -1,0 +1,9 @@
+node_modules
+dist
+.env
+.env.local
+vite-lan.log
+vite-lan.err
+vite-*.log
+vite-*.err
+.vercel

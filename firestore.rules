@@ -1,0 +1,265 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function profilePath(uid) {
+      return /databases/$(database)/documents/users/$(uid);
+    }
+
+    function hasProfile() {
+      return signedIn() && exists(profilePath(request.auth.uid));
+    }
+
+    function profile() {
+      return get(profilePath(request.auth.uid)).data;
+    }
+
+    function isActiveUser() {
+      return hasProfile() && profile().active == true;
+    }
+
+    function isSuperAdmin() {
+      return isActiveUser() && profile().role == 'superadmin';
+    }
+
+    function isTenantAdmin(tenantId) {
+      return isActiveUser() && profile().tenantId == tenantId && profile().role == 'tenant_admin';
+    }
+
+    function isBranchUser(tenantId) {
+      return isActiveUser() && profile().tenantId == tenantId && profile().role == 'branch_user';
+    }
+
+    function canReadTenant(tenantId) {
+      return isSuperAdmin() || (isActiveUser() && profile().tenantId == tenantId);
+    }
+
+    function canManageTenant(tenantId) {
+      return isSuperAdmin() || isTenantAdmin(tenantId);
+    }
+
+    function canOperateTenant(tenantId) {
+      return isSuperAdmin() || isTenantAdmin(tenantId) || isBranchUser(tenantId);
+    }
+
+    function validUserDoc(data, userId) {
+      return data.keys().hasOnly([
+        'email',
+        'displayName',
+        'role',
+        'tenantId',
+        'active',
+        'createdAt',
+        'updatedAt',
+      ]) &&
+      data.email is string &&
+      data.displayName is string &&
+      data.role in ['superadmin', 'tenant_admin', 'branch_user', 'viewer'] &&
+      (data.tenantId == null || data.tenantId is string) &&
+      data.active is bool &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp &&
+      userId.size() > 0;
+    }
+
+    function validTenantDoc(data) {
+      return data.keys().hasOnly([
+        'displayName',
+        'slug',
+        'status',
+        'branding',
+        'ownerUid',
+        'createdAt',
+        'updatedAt',
+      ]) &&
+      data.displayName is string &&
+      data.slug is string &&
+      data.status in ['active', 'paused', 'archived'] &&
+      data.branding is map &&
+      (data.ownerUid == null || data.ownerUid is string) &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function validBranchDoc(data, tenantId) {
+      return data.keys().hasOnly([
+        'tenantId',
+        'name',
+        'slug',
+        'active',
+        'sortOrder',
+        'createdAt',
+        'updatedAt',
+      ]) &&
+      data.tenantId == tenantId &&
+      data.name is string &&
+      data.slug is string &&
+      data.active is bool &&
+      data.sortOrder is int &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function validRaffleDoc(data, tenantId) {
+      return data.keys().hasOnly([
+        'tenantId',
+        'name',
+        'startAt',
+        'endAt',
+        'status',
+        'enabledBranches',
+        'drawMode',
+        'winnersPerGroup',
+        'alternatesPerGroup',
+        'createdAt',
+        'updatedAt',
+        'completedAt',
+        'result',
+      ]) &&
+      data.tenantId == tenantId &&
+      data.name is string &&
+      data.startAt is timestamp &&
+      data.endAt is timestamp &&
+      data.status in ['draft', 'active', 'paused', 'manual_closed', 'expired', 'completed'] &&
+      data.enabledBranches is list &&
+      data.drawMode in ['global', 'branch'] &&
+      data.winnersPerGroup is int &&
+      data.alternatesPerGroup is int &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp &&
+      (data.completedAt == null || data.completedAt is timestamp);
+    }
+
+    function validParticipantDoc(data, tenantId) {
+      return data.keys().hasOnly([
+        'tenantId',
+        'dni',
+        'nombre',
+        'telefono',
+        'sucursal',
+        'raffleId',
+        'raffleName',
+        'jornadaKey',
+        'jornadaLabel',
+        'jornadaStartAt',
+        'jornadaEndAt',
+        'timestamp',
+      ]) &&
+      data.tenantId == tenantId &&
+      data.dni is string &&
+      data.nombre is string &&
+      data.telefono is string &&
+      data.sucursal is string &&
+      data.raffleId is string &&
+      data.raffleName is string &&
+      data.jornadaKey is string &&
+      data.jornadaLabel is string &&
+      data.jornadaStartAt is timestamp &&
+      data.jornadaEndAt is timestamp &&
+      data.timestamp is timestamp;
+    }
+
+    function validCustomerDoc(data, tenantId) {
+      return data.keys().hasOnly([
+        'tenantId',
+        'dni',
+        'nombre',
+        'telefono',
+        'sucursales',
+        'lastRaffleId',
+        'lastRaffleName',
+        'lastJornadaKey',
+        'lastJornadaLabel',
+        'lastParticipationAt',
+        'totalParticipations',
+        'createdAt',
+        'updatedAt',
+      ]) &&
+      data.tenantId == tenantId &&
+      data.dni is string &&
+      data.nombre is string &&
+      data.telefono is string &&
+      data.sucursales is list &&
+      data.lastRaffleId is string &&
+      data.lastRaffleName is string &&
+      data.lastJornadaKey is string &&
+      data.lastJornadaLabel is string &&
+      data.lastParticipationAt is timestamp &&
+      data.totalParticipations is int &&
+      data.totalParticipations >= 1 &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function validConfigDoc(data) {
+      return data.keys().hasOnly([
+        'registrationsEnabled',
+        'updatedAt',
+      ]) &&
+      data.registrationsEnabled is bool &&
+      data.updatedAt is timestamp;
+    }
+
+    match /users/{userId} {
+      allow read: if signedIn() && (request.auth.uid == userId || isSuperAdmin());
+      allow create, update, delete: if isSuperAdmin() && validUserDoc(request.resource.data, userId);
+    }
+
+    match /tenants/{tenantId} {
+      allow read: if canReadTenant(tenantId) || resource.data.status == 'active';
+      allow create, update, delete: if isSuperAdmin() && validTenantDoc(request.resource.data);
+
+      match /config/{configId} {
+        allow read: if canReadTenant(tenantId);
+        allow create, update, delete: if canManageTenant(tenantId) && validConfigDoc(request.resource.data);
+      }
+
+      match /branches/{branchId} {
+        allow read: if true;
+        allow create, update, delete: if canManageTenant(tenantId) && validBranchDoc(request.resource.data, tenantId);
+      }
+
+      match /raffles/{raffleId} {
+        allow read: if true;
+        allow create, update, delete: if canManageTenant(tenantId) && validRaffleDoc(request.resource.data, tenantId);
+      }
+
+      match /participants/{participantId} {
+        allow read: if canReadTenant(tenantId);
+        allow create: if validParticipantDoc(request.resource.data, tenantId);
+        allow update, delete: if canManageTenant(tenantId) && validParticipantDoc(request.resource.data, tenantId);
+      }
+
+      match /customers/{customerId} {
+        allow read: if canReadTenant(tenantId);
+        allow create: if validCustomerDoc(request.resource.data, tenantId);
+        allow update: if validCustomerDoc(request.resource.data, tenantId);
+        allow delete: if canManageTenant(tenantId) && validCustomerDoc(request.resource.data, tenantId);
+      }
+
+      match /users/{tenantUserId} {
+        allow read: if canReadTenant(tenantId);
+        allow create, update, delete: if canManageTenant(tenantId) &&
+          validUserDoc(request.resource.data, tenantUserId) &&
+          request.resource.data.role in ['tenant_admin', 'branch_user', 'viewer'] &&
+          request.resource.data.tenantId == tenantId;
+      }
+
+      match /audit/{auditId} {
+        allow read: if canReadTenant(tenantId);
+        allow create, update, delete: if canOperateTenant(tenantId);
+      }
+    }
+
+    match /platform/{docId} {
+      allow read, write: if isSuperAdmin();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
