@@ -64,6 +64,7 @@ export default function RegisterPage() {
     type: 'idle',
     message: '',
   });
+  const [fieldErrors, setFieldErrors] = useState({});
   const [registrationComplete, setRegistrationComplete] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -128,12 +129,18 @@ export default function RegisterPage() {
       ...current,
       [name]: value,
     }));
+    setFieldErrors((current) => ({
+      ...current,
+      [name]: '',
+    }));
   }
 
   async function handleSubmit(event) {
     event.preventDefault();
 
     const dni = form.dni.replace(/\D+/g, '');
+    const trimmedName = form.nombre.trim();
+    const trimmedPhone = form.telefono.trim();
 
     if (!tenantId || !currentBranch) {
       setStatus({ type: 'error', message: 'El QR no corresponde a una sucursal válida.' });
@@ -150,7 +157,14 @@ export default function RegisterPage() {
       return;
     }
 
-    if (!form.nombre.trim() || !dni || !form.telefono.trim()) {
+    const nextFieldErrors = {
+      nombre: trimmedName ? '' : 'Ingresá nombre y apellido.',
+      dni: dni ? '' : 'Ingresá el DNI solo con números.',
+      telefono: trimmedPhone ? '' : 'Ingresá un teléfono de contacto.',
+    };
+
+    if (Object.values(nextFieldErrors).some(Boolean)) {
+      setFieldErrors(nextFieldErrors);
       setStatus({ type: 'error', message: 'Completá nombre, DNI y teléfono antes de continuar.' });
       return;
     }
@@ -166,8 +180,8 @@ export default function RegisterPage() {
 
       await createTenantParticipant(tenantId, {
         dni,
-        nombre: form.nombre.trim(),
-        telefono: form.telefono.trim(),
+        nombre: trimmedName,
+        telefono: trimmedPhone,
         sucursal: branchName,
         raffleId: activeRaffle.id,
         raffleName: activeRaffle.name,
@@ -179,6 +193,7 @@ export default function RegisterPage() {
 
       startCooldown(tenantId, activeRaffle.id, dni);
       setForm({ nombre: '', dni: '', telefono: '' });
+      setFieldErrors({});
       setRegistrationComplete(true);
       setStatus({
         type: 'success',
@@ -223,10 +238,10 @@ export default function RegisterPage() {
           </div>
         </div>
       ) : showStatusModal ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4 backdrop-blur-sm" role="presentation">
           <div className={`w-full max-w-md rounded-[30px] border bg-[var(--panel)] p-6 text-center shadow-[var(--shell-shadow)] ${
             status.type === 'success' ? 'border-emerald-400/30' : 'border-rose-400/30'
-          }`}>
+          }`} aria-live="assertive" aria-modal="true" role="dialog">
             <div className={`mx-auto flex h-16 w-16 items-center justify-center rounded-full border text-3xl ${
               status.type === 'success'
                 ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-500'
@@ -239,7 +254,7 @@ export default function RegisterPage() {
             </h3>
             <p className="mt-3 text-sm leading-6 text-[var(--text-secondary)]">{status.message}</p>
             <button
-              className="mt-6 inline-flex items-center justify-center rounded-full bg-gradient-to-r from-[var(--accent-blue)] to-[var(--accent-strong)] px-6 py-3 text-sm font-semibold text-white"
+              className="mt-6 inline-flex min-h-11 items-center justify-center rounded-full bg-gradient-to-r from-[var(--accent-blue)] to-[var(--accent-strong)] px-6 py-3 text-sm font-semibold text-white"
               onClick={closeStatusModal}
               type="button"
             >
@@ -266,7 +281,7 @@ export default function RegisterPage() {
             />
           </div>
 
-          <form className="participant-form-shell space-y-5" onSubmit={handleSubmit}>
+          <form className="participant-form-shell space-y-5" noValidate onSubmit={handleSubmit}>
             <div className="participant-form-shell__header">
               <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[var(--accent-strong)]">Datos del participante</p>
               <p className="mt-2 text-sm text-[var(--text-secondary)]">
@@ -286,44 +301,72 @@ export default function RegisterPage() {
               <label className="space-y-2">
                 <span className="text-sm text-[var(--text-secondary)]">Nombre</span>
                 <input
+                  aria-describedby={fieldErrors.nombre ? 'nombre-error' : undefined}
+                  aria-invalid={Boolean(fieldErrors.nombre)}
+                  autoComplete="name"
                   className="w-full rounded-2xl border border-[var(--border-soft)] bg-[var(--panel-muted)] px-4 py-3 text-[var(--text-primary)] outline-none transition focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent-soft)]"
                   disabled={!isReady || isSubmitting}
                   name="nombre"
                   onChange={updateField}
                   placeholder="Nombre y apellido"
+                  required
+                  type="text"
                   value={form.nombre}
                 />
+                {fieldErrors.nombre ? (
+                  <p className="text-sm text-rose-500" id="nombre-error" role="alert">{fieldErrors.nombre}</p>
+                ) : null}
               </label>
 
               <label className="space-y-2">
                 <span className="text-sm text-[var(--text-secondary)]">DNI</span>
                 <input
+                  aria-describedby={fieldErrors.dni ? 'dni-error' : 'dni-helper'}
+                  aria-invalid={Boolean(fieldErrors.dni)}
+                  autoComplete="off"
                   className="w-full rounded-2xl border border-[var(--border-soft)] bg-[var(--panel-muted)] px-4 py-3 text-[var(--text-primary)] outline-none transition focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent-soft)]"
                   disabled={!isReady || isSubmitting}
                   inputMode="numeric"
+                  maxLength={12}
                   name="dni"
                   onChange={updateField}
+                  pattern="[0-9]*"
                   placeholder="Solo números"
+                  required
                   value={form.dni}
                 />
+                {fieldErrors.dni ? (
+                  <p className="text-sm text-rose-500" id="dni-error" role="alert">{fieldErrors.dni}</p>
+                ) : (
+                  <p className="text-xs text-[var(--text-secondary)]" id="dni-helper">Sin puntos ni espacios.</p>
+                )}
               </label>
             </div>
 
             <label className="block space-y-2">
               <span className="text-sm text-[var(--text-secondary)]">Teléfono</span>
               <input
+                aria-describedby={fieldErrors.telefono ? 'telefono-error' : undefined}
+                aria-invalid={Boolean(fieldErrors.telefono)}
+                autoComplete="tel"
                 className="w-full rounded-2xl border border-[var(--border-soft)] bg-[var(--panel-muted)] px-4 py-3 text-[var(--text-primary)] outline-none transition focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent-soft)]"
                 disabled={!isReady || isSubmitting}
+                inputMode="tel"
                 name="telefono"
                 onChange={updateField}
                 placeholder="Ej: 11 5555 5555"
+                required
+                type="tel"
                 value={form.telefono}
               />
+              {fieldErrors.telefono ? (
+                <p className="text-sm text-rose-500" id="telefono-error" role="alert">{fieldErrors.telefono}</p>
+              ) : null}
             </label>
 
             <div className="flex flex-col gap-4 border-t border-[var(--border-soft)] pt-5 sm:flex-row sm:items-center sm:justify-between">
               <button
-                className="inline-flex items-center justify-center rounded-full bg-gradient-to-r from-[var(--accent-blue)] to-[var(--accent-strong)] px-6 py-3 text-sm font-semibold text-white transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex min-h-11 w-full items-center justify-center rounded-full bg-gradient-to-r from-[var(--accent-blue)] to-[var(--accent-strong)] px-6 py-3 text-sm font-semibold text-white transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
                 disabled={!isReady || isSubmitting}
                 type="submit"
               >

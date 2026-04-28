@@ -206,13 +206,15 @@ export default function PortalPage() {
                 </p>
               </div>
 
-              <form className="space-y-4" onSubmit={handleSubmit}>
+              <form className="space-y-4" noValidate onSubmit={handleSubmit}>
                 <label className="block space-y-2">
                   <span className="text-sm text-[var(--text-secondary)]">Email</span>
                   <input
+                    autoComplete="email"
                     className="w-full rounded-2xl border border-[var(--border-soft)] bg-[var(--panel-muted)] px-4 py-3 text-[var(--text-primary)] outline-none transition focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent-soft)]"
                     onChange={(event) => setEmail(event.target.value)}
                     placeholder="nombre@empresa.com"
+                    required
                     type="email"
                     value={email}
                   />
@@ -221,9 +223,11 @@ export default function PortalPage() {
                 <label className="block space-y-2">
                   <span className="text-sm text-[var(--text-secondary)]">Contraseña</span>
                   <input
+                    autoComplete="current-password"
                     className="w-full rounded-2xl border border-[var(--border-soft)] bg-[var(--panel-muted)] px-4 py-3 text-[var(--text-primary)] outline-none transition focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent-soft)]"
                     onChange={(event) => setPassword(event.target.value)}
                     placeholder="Tu contraseña"
+                    required
                     type="password"
                     value={password}
                   />
@@ -242,7 +246,7 @@ export default function PortalPage() {
                 ) : null}
 
                 <button
-                  className="inline-flex items-center justify-center rounded-full bg-gradient-to-r from-[var(--accent-blue)] to-[var(--accent-strong)] px-6 py-3 text-sm font-semibold text-white transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex w-full items-center justify-center rounded-full bg-gradient-to-r from-[var(--accent-blue)] to-[var(--accent-strong)] px-6 py-3 text-sm font-semibold text-white transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
                   disabled={loading}
                   type="submit"
                 >

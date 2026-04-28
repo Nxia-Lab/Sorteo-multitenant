@@ -45,3 +45,4 @@ Ver [`FIREBASE_MULTI_TENANT.md`](./FIREBASE_MULTI_TENANT.md) para la estructura 
 
 - Este proyecto no comparte base con el sistema anterior.
 - El acceso operativo se resuelve por `users/{uid}` y `tenants/{tenantId}`.
+- Las convenciones de desarrollo estan en [`CONTRIBUTING.md`](./CONTRIBUTING.md).
