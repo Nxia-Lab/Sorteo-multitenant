@@ -47,6 +47,10 @@ export async function uploadBrandLogoFile(file, scope = 'tenant') {
     throw new Error('El logo debe pesar menos de 1 MB.');
   }
 
+  if (file.size <= 512 * 1024) {
+    return readFileAsDataUrl(file);
+  }
+
   const safeScope = sanitizeSegment(scope) || 'tenant';
   const extension = sanitizeSegment(file.name.split('.').pop()) || 'image';
   const logoRef = ref(storage, `brand-logos/${safeScope}/${randomId()}.${extension}`);
