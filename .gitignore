@@ -6,4 +6,5 @@ vite-lan.log
 vite-lan.err
 vite-*.log
 vite-*.err
+firebase-debug.log
 .vercel

@@ -23,6 +23,7 @@ import {
   updateTenantRaffle,
 } from '../lib/portal';
 import { validateStrongPassword } from '../lib/passwordPolicy';
+import { uploadBrandLogoFile } from '../lib/storage';
 import { getRoleLabel, ROLES } from '../lib/tenantModel';
 
 function StatCard({ label, value, hint }) {
@@ -159,6 +160,17 @@ export default function TenantWorkspacePage() {
   const [passwordChangeError, setPasswordChangeError] = useState('');
   const [passwordChangeMessage, setPasswordChangeMessage] = useState('');
   const [activeSection, setActiveSection] = useState('resumen');
+  const [settingsForm, setSettingsForm] = useState({
+    displayName: '',
+    brandingDisplayName: '',
+    primaryColor: '#007de8',
+    logoUrl: '',
+  });
+  const [settingsLogoFile, setSettingsLogoFile] = useState(null);
+  const [settingsLogoPreview, setSettingsLogoPreview] = useState('');
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [settingsMessage, setSettingsMessage] = useState('');
+  const [settingsError, setSettingsError] = useState('');
   const branches = Array.isArray(tenant?.branches) ? tenant.branches : [];
   const visibleBranches = tenantBranches.length > 0 ? tenantBranches : branches;
   const activeBranches = useMemo(
@@ -313,6 +325,32 @@ export default function TenantWorkspacePage() {
     setRaffleStartAt(today);
     setRaffleEndAt(today);
   }, [raffleEndAt, raffleStartAt]);
+
+  useEffect(() => {
+    const branding = tenant?.branding || {};
+
+    setSettingsForm({
+      displayName: tenant?.displayName || tenant?.name || tenant?.slug || '',
+      brandingDisplayName: branding.displayName || branding.name || tenant?.displayName || tenant?.name || '',
+      primaryColor: branding.primaryColor || '#007de8',
+      logoUrl: branding.logoUrl || '',
+    });
+    setSettingsLogoFile(null);
+    setSettingsLogoPreview(branding.logoUrl || '');
+    setSettingsMessage('');
+    setSettingsError('');
+  }, [tenant?.id, tenant?.slug, tenant?.displayName, tenant?.name, tenant?.branding]);
+
+  useEffect(() => {
+    if (!settingsLogoFile) {
+      return undefined;
+    }
+
+    const previewUrl = URL.createObjectURL(settingsLogoFile);
+    setSettingsLogoPreview(previewUrl);
+
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [settingsLogoFile]);
 
   useEffect(() => {
     if (participantableRaffles.length === 0) {
@@ -1075,11 +1113,55 @@ export default function TenantWorkspacePage() {
     }
   }
 
+  async function handleUpdateTenantSettings(event) {
+    event.preventDefault();
+    setSettingsError('');
+    setSettingsMessage('');
+    setSettingsSaving(true);
+
+    try {
+      if (!tenantId || tenantId === 'global') {
+        throw new Error('No encontramos la empresa para actualizar.');
+      }
+
+      const displayName = settingsForm.displayName.trim();
+      const brandingDisplayName = settingsForm.brandingDisplayName.trim() || displayName;
+      const primaryColor = settingsForm.primaryColor.trim() || '#007de8';
+      const logoUrl = settingsLogoFile
+        ? await uploadBrandLogoFile(settingsLogoFile, tenantId)
+        : settingsForm.logoUrl.trim();
+
+      await updateDoc(doc(db, 'tenants', tenantId), {
+        displayName,
+        'branding.displayName': brandingDisplayName,
+        'branding.name': brandingDisplayName,
+        'branding.primaryColor': primaryColor,
+        'branding.logoUrl': logoUrl,
+        updatedAt: serverTimestamp(),
+      });
+
+      setSettingsForm((current) => ({
+        ...current,
+        displayName,
+        brandingDisplayName,
+        primaryColor,
+        logoUrl,
+      }));
+      setSettingsLogoFile(null);
+      setSettingsLogoPreview(logoUrl);
+      setSettingsMessage('Configuración de marca actualizada.');
+    } catch (error) {
+      setSettingsError(error?.message || 'No pudimos actualizar la configuración.');
+    } finally {
+      setSettingsSaving(false);
+    }
+  }
+
   const sidebarSections =
     tenantId === 'global'
       ? [
           { id: 'resumen', label: 'Resumen', hint: 'Vista general' },
-          { id: 'cuenta', label: 'Cuenta', hint: 'Acceso actual' },
+          { id: 'configuracion', label: 'Configuración', hint: 'Marca y colores' },
         ]
       : [
           { id: 'resumen', label: 'Resumen', hint: 'Vista general' },
@@ -1087,7 +1169,7 @@ export default function TenantWorkspacePage() {
           { id: 'personas', label: 'Personas', hint: 'Participantes cargados' },
           { id: 'sedes', label: 'Sucursales', hint: 'Puntos activos' },
           { id: 'historial', label: 'Historial', hint: 'Movimientos recientes' },
-          { id: 'cuenta', label: 'Cuenta', hint: 'Acceso actual' },
+          { id: 'configuracion', label: 'Configuración', hint: 'Marca y colores' },
         ];
 
   return (
@@ -1993,28 +2075,151 @@ export default function TenantWorkspacePage() {
             </Card>
           ) : null}
 
-          {activeSection === 'cuenta' ? (
+          {activeSection === 'configuracion' ? (
             <Card>
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
-                  <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[var(--accent-strong)]">Tu cuenta</p>
-                  <p className="mt-2 text-lg font-semibold text-[var(--text-primary)]">{currentUser.email}</p>
+                  <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[var(--accent-strong)]">Configuración</p>
+                  <p className="mt-2 text-lg font-semibold text-[var(--text-primary)]">Marca de la empresa</p>
                   <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--text-secondary)]">
-                    Desde esta cuenta se resuelve tu acceso a la empresa y los permisos asociados.
+                    Definí el color principal y el logo que se muestran en el panel y en las pantallas públicas del sorteo.
                   </p>
                 </div>
 
-                <div className="grid min-w-[240px] gap-3 sm:gap-4">
-                  <div className="rounded-[22px] border border-[var(--border-soft)] bg-[var(--panel-muted)] p-4">
-                    <p className="text-xs uppercase tracking-[0.22em] text-[var(--accent-strong)]">Empresa actual</p>
-                    <p className="mt-2 text-sm text-[var(--text-secondary)]">{getTenantDisplayName(tenant)}</p>
-                  </div>
-                  <div className="rounded-[22px] border border-[var(--border-soft)] bg-[var(--panel-muted)] p-4">
-                    <p className="text-xs uppercase tracking-[0.22em] text-[var(--accent-strong)]">Tipo de acceso</p>
-                    <p className="mt-2 text-sm text-[var(--text-secondary)]">{getRoleLabel(profile?.role)}</p>
+                <div className="w-full max-w-sm rounded-[22px] border border-[var(--border-soft)] bg-[var(--panel-muted)] p-4">
+                  <p className="text-xs uppercase tracking-[0.22em] text-[var(--accent-strong)]">Vista previa</p>
+                  <div className="mt-4 flex items-center gap-4">
+                    <img
+                      alt={settingsForm.brandingDisplayName || getTenantDisplayName(tenant)}
+                      className="h-16 w-16 shrink-0 rounded-2xl border border-[var(--border-soft)] bg-[var(--panel)] object-contain p-1 shadow-[var(--card-shadow)]"
+                      src={settingsLogoPreview || settingsForm.logoUrl || tenant?.branding?.logoUrl || '/default-brand-logo.png'}
+                    />
+                    <div className="min-w-0">
+                      <p className="truncate text-base font-semibold text-[var(--text-primary)]">
+                        {settingsForm.brandingDisplayName || settingsForm.displayName || getTenantDisplayName(tenant)}
+                      </p>
+                      <div className="mt-2 flex items-center gap-2 text-xs text-[var(--text-secondary)]">
+                        <span
+                          aria-hidden="true"
+                          className="h-5 w-5 rounded-full border border-[var(--border-soft)]"
+                          style={{ backgroundColor: settingsForm.primaryColor || '#007de8' }}
+                        />
+                        <span>{settingsForm.primaryColor || '#007de8'}</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
+
+              {settingsError ? (
+                <div className="mt-5 rounded-2xl border border-rose-400/30 bg-rose-400/10 px-4 py-3 text-sm text-rose-600">
+                  {settingsError}
+                </div>
+              ) : null}
+
+              {settingsMessage ? (
+                <div className="mt-5 rounded-2xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-600">
+                  {settingsMessage}
+                </div>
+              ) : null}
+
+              <form className="mt-6 space-y-5" onSubmit={handleUpdateTenantSettings}>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <label className="space-y-2">
+                    <span className="text-sm text-[var(--text-secondary)]">Nombre visible</span>
+                    <input
+                      className="w-full rounded-2xl border border-[var(--border-soft)] bg-[var(--panel-muted)] px-4 py-3 text-[var(--text-primary)] outline-none transition focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent-soft)]"
+                      disabled={tenantId === 'global' || settingsSaving}
+                      onChange={(event) => setSettingsForm((current) => ({ ...current, displayName: event.target.value }))}
+                      placeholder="Nombre de la empresa"
+                      required
+                      type="text"
+                      value={settingsForm.displayName}
+                    />
+                  </label>
+
+                  <label className="space-y-2">
+                    <span className="text-sm text-[var(--text-secondary)]">Nombre de marca</span>
+                    <input
+                      className="w-full rounded-2xl border border-[var(--border-soft)] bg-[var(--panel-muted)] px-4 py-3 text-[var(--text-primary)] outline-none transition focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent-soft)]"
+                      disabled={tenantId === 'global' || settingsSaving}
+                      onChange={(event) => setSettingsForm((current) => ({ ...current, brandingDisplayName: event.target.value }))}
+                      placeholder="Nombre que verá el participante"
+                      type="text"
+                      value={settingsForm.brandingDisplayName}
+                    />
+                  </label>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
+                  <label className="space-y-2">
+                    <span className="text-sm text-[var(--text-secondary)]">Color principal</span>
+                    <div className="flex gap-3">
+                      <input
+                        aria-label="Seleccionar color principal"
+                        className="h-12 w-16 rounded-2xl border border-[var(--border-soft)] bg-[var(--panel-muted)] p-1"
+                        disabled={tenantId === 'global' || settingsSaving}
+                        onChange={(event) => setSettingsForm((current) => ({ ...current, primaryColor: event.target.value }))}
+                        type="color"
+                        value={settingsForm.primaryColor}
+                      />
+                      <input
+                        className="min-w-0 flex-1 rounded-2xl border border-[var(--border-soft)] bg-[var(--panel-muted)] px-4 py-3 text-[var(--text-primary)] outline-none transition focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent-soft)]"
+                        disabled={tenantId === 'global' || settingsSaving}
+                        onChange={(event) => setSettingsForm((current) => ({ ...current, primaryColor: event.target.value }))}
+                        pattern="^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$"
+                        placeholder="#007de8"
+                        type="text"
+                        value={settingsForm.primaryColor}
+                      />
+                    </div>
+                  </label>
+
+                  <label className="space-y-2">
+                    <span className="text-sm text-[var(--text-secondary)]">Logo de la empresa</span>
+                    <input
+                      accept="image/*"
+                      className="w-full rounded-2xl border border-[var(--border-soft)] bg-[var(--panel-muted)] px-4 py-3 text-[var(--text-primary)] outline-none transition file:mr-4 file:rounded-full file:border-0 file:bg-[var(--accent-soft)] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-[var(--accent-strong)] focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent-soft)]"
+                      disabled={tenantId === 'global' || settingsSaving}
+                      onChange={(event) => setSettingsLogoFile(event.target.files?.[0] || null)}
+                      type="file"
+                    />
+                  </label>
+                </div>
+
+                <label className="block space-y-2">
+                  <span className="text-sm text-[var(--text-secondary)]">URL del logo</span>
+                  <input
+                    className="w-full rounded-2xl border border-[var(--border-soft)] bg-[var(--panel-muted)] px-4 py-3 text-[var(--text-primary)] outline-none transition focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent-soft)]"
+                    disabled={tenantId === 'global' || settingsSaving || Boolean(settingsLogoFile)}
+                    onChange={(event) => {
+                      setSettingsLogoPreview(event.target.value);
+                      setSettingsForm((current) => ({ ...current, logoUrl: event.target.value }));
+                    }}
+                    placeholder="https://..."
+                    type="url"
+                    value={settingsForm.logoUrl}
+                  />
+                  {settingsLogoFile ? (
+                    <p className="text-xs leading-5 text-[var(--text-secondary)]">
+                      Se usará el archivo seleccionado y se actualizará esta URL al guardar.
+                    </p>
+                  ) : null}
+                </label>
+
+                <div className="flex flex-col gap-3 border-t border-[var(--border-soft)] pt-5 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm leading-6 text-[var(--text-secondary)]">
+                    Los cambios se aplican al encabezado del panel y al registro público del QR.
+                  </p>
+                  <button
+                    className="inline-flex w-full items-center justify-center rounded-full bg-gradient-to-r from-[var(--accent-strong)] to-[var(--accent-blue)] px-6 py-3 text-sm font-semibold text-white shadow-[0_12px_30px_color-mix(in_srgb,var(--accent-strong)_26%,transparent)] transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                    disabled={tenantId === 'global' || settingsSaving}
+                    type="submit"
+                  >
+                    {settingsSaving ? 'Guardando...' : 'Guardar configuración'}
+                  </button>
+                </div>
+              </form>
             </Card>
           ) : null}
         </main>

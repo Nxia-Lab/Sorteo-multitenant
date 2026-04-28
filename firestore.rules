@@ -84,6 +84,27 @@ service cloud.firestore {
       data.updatedAt is timestamp;
     }
 
+    function validTenantBrandingUpdate(data) {
+      return data.diff(resource.data).affectedKeys().hasOnly([
+        'displayName',
+        'branding',
+        'updatedAt',
+      ]) &&
+      data.displayName is string &&
+      data.branding is map &&
+      data.branding.keys().hasOnly([
+        'displayName',
+        'name',
+        'primaryColor',
+        'logoUrl',
+      ]) &&
+      data.branding.displayName is string &&
+      data.branding.name is string &&
+      data.branding.primaryColor is string &&
+      data.branding.logoUrl is string &&
+      data.updatedAt is timestamp;
+    }
+
     function validBranchDoc(data, tenantId) {
       return data.keys().hasOnly([
         'tenantId',
@@ -210,7 +231,10 @@ service cloud.firestore {
 
     match /tenants/{tenantId} {
       allow read: if canReadTenant(tenantId) || resource.data.status == 'active';
-      allow create, update, delete: if isSuperAdmin() && validTenantDoc(request.resource.data);
+      allow create: if isSuperAdmin() && validTenantDoc(request.resource.data);
+      allow delete: if isSuperAdmin();
+      allow update: if (isSuperAdmin() && validTenantDoc(request.resource.data)) ||
+        (canManageTenant(tenantId) && validTenantBrandingUpdate(request.resource.data));
 
       match /config/{configId} {
         allow read: if canReadTenant(tenantId);
