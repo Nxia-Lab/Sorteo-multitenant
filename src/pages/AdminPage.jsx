@@ -107,6 +107,38 @@ function TenantCard({ tenant, onEdit, onOpen, onResetAccess, onToggleStatus }) {
   );
 }
 
+function normalizeSlug(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function createDraftBranch(index = 0) {
+  return {
+    id: `branch-${Date.now()}-${index}`,
+    name: '',
+    slug: '',
+    address: '',
+    phone: '',
+    contactName: '',
+    notes: '',
+    active: true,
+  };
+}
+
+function createDraftUser(index = 0) {
+  return {
+    id: `user-${Date.now()}-${index}`,
+    email: '',
+    displayName: '',
+    role: ROLES.BRANCH_USER,
+    branchSlug: '',
+    password: generateStrongTemporaryPassword(),
+  };
+}
+
 export default function AdminPage() {
   const navigate = useNavigate();
   const { authUser, authReady } = useSyncExternalStore(
@@ -149,8 +181,9 @@ export default function AdminPage() {
     brandingDisplayName: '',
     primaryColor: '#007de8',
     logoUrl: '',
-    branchesText: '',
   });
+  const [tenantBranchesDraft, setTenantBranchesDraft] = useState([createDraftBranch(0)]);
+  const [tenantUsersDraft, setTenantUsersDraft] = useState([]);
   const [tenantLogoFile, setTenantLogoFile] = useState(null);
   const [tenantLogoPreview, setTenantLogoPreview] = useState('');
   const [platformForm, setPlatformForm] = useState({
@@ -434,15 +467,46 @@ export default function AdminPage() {
     setTenantSaving(true);
 
     try {
-      const branchList = tenantForm.branchesText
-        .split('\n')
-        .map((line) => line.trim())
-        .filter(Boolean)
-        .map((line, index) => ({
-          name: line,
-          slug: line,
-          sortOrder: index + 1,
-        }));
+      const branchList = tenantBranchesDraft
+        .map((branch, index) => {
+          const name = String(branch.name || '').trim();
+          const slug = normalizeSlug(branch.slug || name);
+
+          if (!name && !slug) {
+            return null;
+          }
+
+          return {
+            name,
+            slug,
+            address: String(branch.address || '').trim(),
+            phone: String(branch.phone || '').trim(),
+            contactName: String(branch.contactName || '').trim(),
+            notes: String(branch.notes || '').trim(),
+            active: branch.active !== false,
+            sortOrder: index + 1,
+          };
+        })
+        .filter(Boolean);
+      const branchBySlug = new Map(branchList.map((branch) => [branch.slug, branch]));
+      const additionalUsers = tenantUsersDraft
+        .map((user) => {
+          const email = String(user.email || '').trim().toLowerCase();
+          if (!email) {
+            return null;
+          }
+
+          const branch = branchBySlug.get(user.branchSlug);
+          return {
+            email,
+            displayName: String(user.displayName || '').trim(),
+            role: user.role || ROLES.VIEWER,
+            password: user.password || generateStrongTemporaryPassword(),
+            branchName: branch?.name || '',
+            branchSlug: branch?.slug || '',
+          };
+        })
+        .filter(Boolean);
 
       const result = await createTenantWithAccess({
         tenant: {
@@ -464,6 +528,7 @@ export default function AdminPage() {
           email: tenantForm.accessEmail,
           password: tenantForm.accessPassword,
           displayName: tenantForm.accessDisplayName || tenantForm.brandingDisplayName || tenantForm.displayName,
+          additionalUsers,
         },
       });
 
@@ -481,12 +546,22 @@ export default function AdminPage() {
           portalUrl: window.location.origin,
           idToken: token,
         });
+
+        for (const userAccess of additionalUsers) {
+          await sendTenantAccessEmail({
+            email: userAccess.email,
+            password: userAccess.password,
+            tenantName: tenantForm.brandingDisplayName || tenantForm.displayName || result.tenantId,
+            portalUrl: window.location.origin,
+            idToken: token,
+          });
+        }
       } catch (emailError) {
         emailMessage = ` No pudimos enviar el email: ${emailError?.message || 'error desconocido'}.`;
       }
 
       setTenantMessage(
-        `Empresa creada correctamente: ${result.tenantId}. Acceso temporal: ${result.email} / ${tenantForm.accessPassword}.${emailMessage}`,
+        `Empresa creada correctamente: ${result.tenantId}. Acceso temporal: ${result.email} / ${tenantForm.accessPassword}. Usuarios adicionales: ${additionalUsers.length}.${emailMessage}`,
       );
       setTenantForm({
         displayName: '',
@@ -497,8 +572,9 @@ export default function AdminPage() {
         brandingDisplayName: '',
         primaryColor: '#007de8',
         logoUrl: '',
-        branchesText: '',
       });
+      setTenantBranchesDraft([createDraftBranch(0)]);
+      setTenantUsersDraft([]);
       setTenantLogoFile(null);
       setTenantLogoPreview('');
     } catch (createError) {
@@ -1078,15 +1154,229 @@ export default function AdminPage() {
                   </label>
                 </div>
 
-                <label className="block space-y-2">
-                  <span className="text-sm text-[var(--text-secondary)]">Sucursales iniciales</span>
-                  <textarea
-                    className="min-h-[120px] w-full rounded-2xl border border-[var(--border-soft)] bg-[var(--panel-muted)] px-4 py-3 text-[var(--text-primary)] outline-none transition focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent-soft)]"
-                    onChange={(event) => setTenantForm((current) => ({ ...current, branchesText: event.target.value }))}
-                    placeholder={'Sucursal Central\nSucursal Norte'}
-                    value={tenantForm.branchesText}
-                  />
-                </label>
+                <div className="rounded-[22px] border border-[var(--border-soft)] bg-[var(--panel-muted)] p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[var(--accent-strong)]">Sucursales</p>
+                      <p className="mt-2 text-sm text-[var(--text-secondary)]">
+                        Cargá datos operativos para cada punto de venta. El alias se usa para construir el QR.
+                      </p>
+                    </div>
+                    <button
+                      className="rounded-full border border-[var(--border-soft)] bg-[var(--panel)] px-4 py-2 text-sm font-semibold text-[var(--text-primary)] transition hover:border-[var(--accent-strong)] hover:text-[var(--accent-strong)]"
+                      onClick={() => setTenantBranchesDraft((current) => [...current, createDraftBranch(current.length)])}
+                      type="button"
+                    >
+                      Agregar sucursal
+                    </button>
+                  </div>
+
+                  <div className="mt-4 space-y-4">
+                    {tenantBranchesDraft.map((branch, branchIndex) => {
+                      const resolvedSlug = normalizeSlug(branch.slug || branch.name);
+                      return (
+                        <div className="rounded-[20px] border border-[var(--border-soft)] bg-[var(--panel)] p-4" key={branch.id}>
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <p className="text-sm font-semibold text-[var(--text-primary)]">Sucursal {branchIndex + 1}</p>
+                            <button
+                              className="rounded-full border border-rose-400/30 bg-rose-400/10 px-4 py-2 text-xs font-semibold text-rose-600 disabled:cursor-not-allowed disabled:opacity-50"
+                              disabled={tenantBranchesDraft.length === 1}
+                              onClick={() => setTenantBranchesDraft((current) => current.filter((item) => item.id !== branch.id))}
+                              type="button"
+                            >
+                              Quitar
+                            </button>
+                          </div>
+
+                          <div className="mt-4 grid gap-4 md:grid-cols-2">
+                            <label className="space-y-2">
+                              <span className="text-sm text-[var(--text-secondary)]">Nombre</span>
+                              <input
+                                className="w-full rounded-2xl border border-[var(--border-soft)] bg-[var(--panel-muted)] px-4 py-3 text-[var(--text-primary)] outline-none transition focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent-soft)]"
+                                onChange={(event) => setTenantBranchesDraft((current) => current.map((item) => item.id === branch.id ? { ...item, name: event.target.value, slug: item.slug || normalizeSlug(event.target.value) } : item))}
+                                placeholder="Sucursal Central"
+                                type="text"
+                                value={branch.name}
+                              />
+                            </label>
+
+                            <label className="space-y-2">
+                              <span className="text-sm text-[var(--text-secondary)]">Alias QR</span>
+                              <input
+                                className="w-full rounded-2xl border border-[var(--border-soft)] bg-[var(--panel-muted)] px-4 py-3 text-[var(--text-primary)] outline-none transition focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent-soft)]"
+                                onChange={(event) => setTenantBranchesDraft((current) => current.map((item) => item.id === branch.id ? { ...item, slug: normalizeSlug(event.target.value) } : item))}
+                                placeholder="sucursal-central"
+                                type="text"
+                                value={branch.slug || resolvedSlug}
+                              />
+                            </label>
+                          </div>
+
+                          <div className="mt-4 grid gap-4 md:grid-cols-3">
+                            <label className="space-y-2">
+                              <span className="text-sm text-[var(--text-secondary)]">Dirección</span>
+                              <input
+                                className="w-full rounded-2xl border border-[var(--border-soft)] bg-[var(--panel-muted)] px-4 py-3 text-[var(--text-primary)] outline-none transition focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent-soft)]"
+                                onChange={(event) => setTenantBranchesDraft((current) => current.map((item) => item.id === branch.id ? { ...item, address: event.target.value } : item))}
+                                placeholder="Av. Siempre Viva 123"
+                                type="text"
+                                value={branch.address}
+                              />
+                            </label>
+
+                            <label className="space-y-2">
+                              <span className="text-sm text-[var(--text-secondary)]">Teléfono</span>
+                              <input
+                                className="w-full rounded-2xl border border-[var(--border-soft)] bg-[var(--panel-muted)] px-4 py-3 text-[var(--text-primary)] outline-none transition focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent-soft)]"
+                                inputMode="tel"
+                                onChange={(event) => setTenantBranchesDraft((current) => current.map((item) => item.id === branch.id ? { ...item, phone: event.target.value } : item))}
+                                placeholder="11 5555 5555"
+                                type="tel"
+                                value={branch.phone}
+                              />
+                            </label>
+
+                            <label className="space-y-2">
+                              <span className="text-sm text-[var(--text-secondary)]">Responsable</span>
+                              <input
+                                className="w-full rounded-2xl border border-[var(--border-soft)] bg-[var(--panel-muted)] px-4 py-3 text-[var(--text-primary)] outline-none transition focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent-soft)]"
+                                onChange={(event) => setTenantBranchesDraft((current) => current.map((item) => item.id === branch.id ? { ...item, contactName: event.target.value } : item))}
+                                placeholder="Nombre del encargado"
+                                type="text"
+                                value={branch.contactName}
+                              />
+                            </label>
+                          </div>
+
+                          <label className="mt-4 block space-y-2">
+                            <span className="text-sm text-[var(--text-secondary)]">Notas internas</span>
+                            <textarea
+                              className="min-h-[88px] w-full rounded-2xl border border-[var(--border-soft)] bg-[var(--panel-muted)] px-4 py-3 text-[var(--text-primary)] outline-none transition focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent-soft)]"
+                              onChange={(event) => setTenantBranchesDraft((current) => current.map((item) => item.id === branch.id ? { ...item, notes: event.target.value } : item))}
+                              placeholder="Horarios, referencias o indicaciones para operación."
+                              value={branch.notes}
+                            />
+                          </label>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="rounded-[22px] border border-[var(--border-soft)] bg-[var(--panel-muted)] p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[var(--accent-strong)]">Usuarios adicionales</p>
+                      <p className="mt-2 text-sm text-[var(--text-secondary)]">
+                        El acceso principal se crea como administrador. Acá podés sumar usuarios de sucursal o visualizadores.
+                      </p>
+                    </div>
+                    <button
+                      className="rounded-full border border-[var(--border-soft)] bg-[var(--panel)] px-4 py-2 text-sm font-semibold text-[var(--text-primary)] transition hover:border-[var(--accent-strong)] hover:text-[var(--accent-strong)]"
+                      onClick={() => setTenantUsersDraft((current) => [...current, createDraftUser(current.length)])}
+                      type="button"
+                    >
+                      Agregar usuario
+                    </button>
+                  </div>
+
+                  {tenantUsersDraft.length > 0 ? (
+                    <div className="mt-4 space-y-4">
+                      {tenantUsersDraft.map((user, userIndex) => (
+                        <div className="rounded-[20px] border border-[var(--border-soft)] bg-[var(--panel)] p-4" key={user.id}>
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <p className="text-sm font-semibold text-[var(--text-primary)]">Usuario {userIndex + 1}</p>
+                            <button
+                              className="rounded-full border border-rose-400/30 bg-rose-400/10 px-4 py-2 text-xs font-semibold text-rose-600"
+                              onClick={() => setTenantUsersDraft((current) => current.filter((item) => item.id !== user.id))}
+                              type="button"
+                            >
+                              Quitar
+                            </button>
+                          </div>
+
+                          <div className="mt-4 grid gap-4 md:grid-cols-2">
+                            <label className="space-y-2">
+                              <span className="text-sm text-[var(--text-secondary)]">Email</span>
+                              <input
+                                className="w-full rounded-2xl border border-[var(--border-soft)] bg-[var(--panel-muted)] px-4 py-3 text-[var(--text-primary)] outline-none transition focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent-soft)]"
+                                onChange={(event) => setTenantUsersDraft((current) => current.map((item) => item.id === user.id ? { ...item, email: event.target.value } : item))}
+                                placeholder="usuario@empresa.com"
+                                type="email"
+                                value={user.email}
+                              />
+                            </label>
+
+                            <label className="space-y-2">
+                              <span className="text-sm text-[var(--text-secondary)]">Nombre</span>
+                              <input
+                                className="w-full rounded-2xl border border-[var(--border-soft)] bg-[var(--panel-muted)] px-4 py-3 text-[var(--text-primary)] outline-none transition focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent-soft)]"
+                                onChange={(event) => setTenantUsersDraft((current) => current.map((item) => item.id === user.id ? { ...item, displayName: event.target.value } : item))}
+                                placeholder="Operador sucursal"
+                                type="text"
+                                value={user.displayName}
+                              />
+                            </label>
+                          </div>
+
+                          <div className="mt-4 grid gap-4 md:grid-cols-3">
+                            <label className="space-y-2">
+                              <span className="text-sm text-[var(--text-secondary)]">Rol</span>
+                              <select
+                                className="w-full rounded-2xl border border-[var(--border-soft)] bg-[var(--panel-muted)] px-4 py-3 text-[var(--text-primary)] outline-none transition focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent-soft)]"
+                                onChange={(event) => setTenantUsersDraft((current) => current.map((item) => item.id === user.id ? { ...item, role: event.target.value } : item))}
+                                value={user.role}
+                              >
+                                <option value={ROLES.TENANT_ADMIN}>Administrador</option>
+                                <option value={ROLES.BRANCH_USER}>Usuario de sucursal</option>
+                                <option value={ROLES.VIEWER}>Visualizador</option>
+                              </select>
+                            </label>
+
+                            <label className="space-y-2">
+                              <span className="text-sm text-[var(--text-secondary)]">Sucursal</span>
+                              <select
+                                className="w-full rounded-2xl border border-[var(--border-soft)] bg-[var(--panel-muted)] px-4 py-3 text-[var(--text-primary)] outline-none transition focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent-soft)]"
+                                onChange={(event) => setTenantUsersDraft((current) => current.map((item) => item.id === user.id ? { ...item, branchSlug: event.target.value } : item))}
+                                value={user.branchSlug}
+                              >
+                                <option value="">Todas / sin asignar</option>
+                                {tenantBranchesDraft.map((branch) => {
+                                  const branchSlug = normalizeSlug(branch.slug || branch.name);
+                                  return branchSlug ? (
+                                    <option key={`${user.id}-${branch.id}`} value={branchSlug}>
+                                      {branch.name || branchSlug}
+                                    </option>
+                                  ) : null;
+                                })}
+                              </select>
+                            </label>
+
+                            <label className="space-y-2">
+                              <span className="text-sm text-[var(--text-secondary)]">Clave temporal</span>
+                              <div className="flex gap-2">
+                                <input
+                                  className="min-w-0 flex-1 rounded-2xl border border-[var(--border-soft)] bg-[var(--panel-muted)] px-4 py-3 text-[var(--text-primary)] outline-none transition focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent-soft)]"
+                                  readOnly
+                                  value={user.password}
+                                />
+                                <button
+                                  className="rounded-full border border-[var(--border-soft)] bg-[var(--panel-muted)] px-4 py-2 text-xs font-semibold text-[var(--text-primary)] transition hover:border-[var(--accent-strong)] hover:text-[var(--accent-strong)]"
+                                  onClick={() => setTenantUsersDraft((current) => current.map((item) => item.id === user.id ? { ...item, password: generateStrongTemporaryPassword() } : item))}
+                                  type="button"
+                                >
+                                  Generar
+                                </button>
+                              </div>
+                            </label>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-4 text-sm text-[var(--text-secondary)]">No agregaste usuarios adicionales todavía.</p>
+                  )}
+                </div>
 
                 <button
                   className="inline-flex items-center justify-center rounded-full bg-gradient-to-r from-[var(--accent-strong)] to-[var(--accent-blue)] px-6 py-3 text-sm font-semibold text-white shadow-[0_12px_30px_color-mix(in_srgb,var(--accent-strong)_26%,transparent)] transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60"

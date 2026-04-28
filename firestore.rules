@@ -51,7 +51,11 @@ service cloud.firestore {
         'displayName',
         'role',
         'tenantId',
+        'branchName',
+        'branchSlug',
         'active',
+        'mustChangePassword',
+        'tempPasswordCreatedAt',
         'createdAt',
         'updatedAt',
       ]) &&
@@ -59,7 +63,11 @@ service cloud.firestore {
       data.displayName is string &&
       data.role in ['superadmin', 'tenant_admin', 'branch_user', 'viewer'] &&
       (data.tenantId == null || data.tenantId is string) &&
+      (data.branchName == null || data.branchName is string) &&
+      (data.branchSlug == null || data.branchSlug is string) &&
       data.active is bool &&
+      (data.mustChangePassword == null || data.mustChangePassword is bool) &&
+      (data.tempPasswordCreatedAt == null || data.tempPasswordCreatedAt is timestamp) &&
       data.createdAt is timestamp &&
       data.updatedAt is timestamp &&
       userId.size() > 0;
@@ -72,6 +80,8 @@ service cloud.firestore {
         'status',
         'branding',
         'ownerUid',
+        'ownerEmail',
+        'branches',
         'createdAt',
         'updatedAt',
       ]) &&
@@ -80,6 +90,8 @@ service cloud.firestore {
       data.status in ['active', 'paused', 'archived'] &&
       data.branding is map &&
       (data.ownerUid == null || data.ownerUid is string) &&
+      (data.ownerEmail == null || data.ownerEmail is string) &&
+      data.branches is list &&
       data.createdAt is timestamp &&
       data.updatedAt is timestamp;
     }
@@ -110,6 +122,10 @@ service cloud.firestore {
         'tenantId',
         'name',
         'slug',
+        'address',
+        'phone',
+        'contactName',
+        'notes',
         'active',
         'sortOrder',
         'createdAt',
@@ -118,6 +134,10 @@ service cloud.firestore {
       data.tenantId == tenantId &&
       data.name is string &&
       data.slug is string &&
+      data.address is string &&
+      data.phone is string &&
+      data.contactName is string &&
+      data.notes is string &&
       data.active is bool &&
       data.sortOrder is int &&
       data.createdAt is timestamp &&

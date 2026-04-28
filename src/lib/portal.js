@@ -247,6 +247,10 @@ export async function createTenant(tenant) {
     normalizedBranches.push({
       name: String(branch?.name || branchSlug).trim(),
       slug: branchSlug,
+      address: String(branch?.address || '').trim(),
+      phone: String(branch?.phone || '').trim(),
+      contactName: String(branch?.contactName || '').trim(),
+      notes: String(branch?.notes || '').trim(),
       active: branch?.active !== false,
       sortOrder: Number.isFinite(Number(branch?.sortOrder)) ? Number(branch.sortOrder) : 1,
     });
@@ -257,6 +261,10 @@ export async function createTenant(tenant) {
         tenantId: slug,
         name: String(branch?.name || branchSlug).trim(),
         slug: branchSlug,
+        address: String(branch?.address || '').trim(),
+        phone: String(branch?.phone || '').trim(),
+        contactName: String(branch?.contactName || '').trim(),
+        notes: String(branch?.notes || '').trim(),
         active: branch?.active !== false,
         sortOrder: Number.isFinite(Number(branch?.sortOrder)) ? Number(branch.sortOrder) : 1,
         createdAt: serverTimestamp(),
@@ -320,6 +328,10 @@ export async function updateTenant(tenantId, tenant) {
     normalizedBranches.push({
       name: String(branch?.name || branchSlug).trim(),
       slug: branchSlug,
+      address: String(branch?.address || '').trim(),
+      phone: String(branch?.phone || '').trim(),
+      contactName: String(branch?.contactName || '').trim(),
+      notes: String(branch?.notes || '').trim(),
       active: branch?.active !== false,
       sortOrder: Number.isFinite(Number(branch?.sortOrder)) ? Number(branch.sortOrder) : 1,
     });
@@ -330,6 +342,10 @@ export async function updateTenant(tenantId, tenant) {
         tenantId,
         name: String(branch?.name || branchSlug).trim(),
         slug: branchSlug,
+        address: String(branch?.address || '').trim(),
+        phone: String(branch?.phone || '').trim(),
+        contactName: String(branch?.contactName || '').trim(),
+        notes: String(branch?.notes || '').trim(),
         active: branch?.active !== false,
         sortOrder: Number.isFinite(Number(branch?.sortOrder)) ? Number(branch.sortOrder) : 1,
         createdAt: serverTimestamp(),

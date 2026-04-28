@@ -28,6 +28,9 @@ export async function createTenantAdminAccess({
   displayName,
   tenantId,
   tenantDisplayName,
+  role = ROLES.TENANT_ADMIN,
+  branchName = '',
+  branchSlug = '',
 }) {
   const normalizedEmail = String(email || '').trim().toLowerCase();
   const normalizedPassword = String(password || '');
@@ -62,8 +65,10 @@ export async function createTenantAdminAccess({
     {
       email: normalizedEmail,
       displayName: normalizedDisplayName || tenantDisplayName || normalizedEmail,
-      role: ROLES.TENANT_ADMIN,
+      role: [ROLES.TENANT_ADMIN, ROLES.BRANCH_USER, ROLES.VIEWER].includes(role) ? role : ROLES.TENANT_ADMIN,
       tenantId,
+      branchName: String(branchName || '').trim() || null,
+      branchSlug: String(branchSlug || '').trim() || null,
       active: true,
       mustChangePassword: true,
       tempPasswordCreatedAt: serverTimestamp(),
@@ -90,6 +95,7 @@ export async function createTenantWithAccess({
   const accessPassword = String(access?.password || '');
   const accessDisplayName = String(access?.displayName || '').trim();
   const tenantDisplayName = String(tenant?.displayName || '').trim();
+  const additionalUsers = Array.isArray(access?.additionalUsers) ? access.additionalUsers : [];
 
   if (!accessEmail) {
     throw new Error('El email de acceso es obligatorio.');
@@ -126,6 +132,8 @@ export async function createTenantWithAccess({
           displayName: accessDisplayName || tenantDisplayName || accessEmail,
           role: ROLES.TENANT_ADMIN,
           tenantId: slug,
+          branchName: null,
+          branchSlug: null,
           active: true,
           mustChangePassword: true,
           tempPasswordCreatedAt: serverTimestamp(),
@@ -139,6 +147,26 @@ export async function createTenantWithAccess({
       throw profileError;
     }
 
+    const createdUsers = [];
+    for (const userAccess of additionalUsers) {
+      const userEmail = String(userAccess?.email || '').trim().toLowerCase();
+      if (!userEmail) {
+        continue;
+      }
+
+      const createdUser = await createTenantAdminAccess({
+        email: userEmail,
+        password: String(userAccess?.password || ''),
+        displayName: String(userAccess?.displayName || '').trim(),
+        tenantId: slug,
+        tenantDisplayName,
+        role: userAccess?.role,
+        branchName: userAccess?.branchName,
+        branchSlug: userAccess?.branchSlug,
+      });
+      createdUsers.push(createdUser);
+    }
+
     await signOut(auth).catch(() => {});
 
     return {
@@ -146,6 +174,7 @@ export async function createTenantWithAccess({
       email: accessEmail,
       displayName: accessDisplayName || tenantDisplayName || accessEmail,
       tenantId: slug,
+      users: createdUsers,
     };
   } catch (error) {
     await deleteUser(credential.user).catch(() => {});
