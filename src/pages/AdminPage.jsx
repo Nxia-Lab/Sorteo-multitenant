@@ -184,6 +184,7 @@ export default function AdminPage() {
   });
   const [tenantBranchesDraft, setTenantBranchesDraft] = useState([createDraftBranch(0)]);
   const [tenantUsersDraft, setTenantUsersDraft] = useState([]);
+  const [editBranchesDraft, setEditBranchesDraft] = useState([createDraftBranch(0)]);
   const [tenantLogoFile, setTenantLogoFile] = useState(null);
   const [tenantLogoPreview, setTenantLogoPreview] = useState('');
   const [platformForm, setPlatformForm] = useState({
@@ -198,10 +199,9 @@ export default function AdminPage() {
     slug: '',
     ownerEmail: '',
     brandingDisplayName: '',
-    primaryColor: '#007de8',
-    logoUrl: '',
-    status: 'active',
-    branchesText: '',
+      primaryColor: '#007de8',
+      logoUrl: '',
+      status: 'active',
   });
   const [editTenantLogoFile, setEditTenantLogoFile] = useState(null);
   const [editTenantLogoPreview, setEditTenantLogoPreview] = useState('');
@@ -360,10 +360,22 @@ export default function AdminPage() {
       primaryColor: selectedTenant.branding?.primaryColor || '#007de8',
       logoUrl: selectedTenant.branding?.logoUrl || '',
       status: selectedTenant.status === 'paused' ? 'paused' : 'active',
-      branchesText: Array.isArray(selectedTenant.branches)
-        ? selectedTenant.branches.map((branch) => branch.name || branch.slug).filter(Boolean).join('\n')
-        : '',
     });
+    const selectedBranches = Array.isArray(selectedTenant.branches) ? selectedTenant.branches : [];
+    setEditBranchesDraft(
+      selectedBranches.length > 0
+        ? selectedBranches.map((branch, index) => ({
+            id: `edit-branch-${selectedTenant.slug}-${branch.slug || index}`,
+            name: branch.name || '',
+            slug: branch.slug || normalizeSlug(branch.name),
+            address: branch.address || '',
+            phone: branch.phone || '',
+            contactName: branch.contactName || '',
+            notes: branch.notes || '',
+            active: branch.active !== false,
+          }))
+        : [createDraftBranch(0)],
+    );
 
     setResetAccessForm({
       email: selectedTenant.ownerEmail || '',
@@ -595,15 +607,27 @@ export default function AdminPage() {
         throw new Error('Elegí una empresa para editar.');
       }
 
-      const branchList = editTenantForm.branchesText
-        .split('\n')
-        .map((line) => line.trim())
-        .filter(Boolean)
-        .map((line, index) => ({
-          name: line,
-          slug: line,
-          sortOrder: index + 1,
-        }));
+      const branchList = editBranchesDraft
+        .map((branch, index) => {
+          const name = String(branch.name || '').trim();
+          const slug = normalizeSlug(branch.slug || name);
+
+          if (!name && !slug) {
+            return null;
+          }
+
+          return {
+            name,
+            slug,
+            address: String(branch.address || '').trim(),
+            phone: String(branch.phone || '').trim(),
+            contactName: String(branch.contactName || '').trim(),
+            notes: String(branch.notes || '').trim(),
+            active: branch.active !== false,
+            sortOrder: index + 1,
+          };
+        })
+        .filter(Boolean);
 
       await updateTenant(selectedTenant.slug, {
         displayName: editTenantForm.displayName,
@@ -1564,14 +1588,131 @@ export default function AdminPage() {
                     </div>
                   </label>
 
-                  <label className="space-y-2">
-                    <span className="text-sm text-[var(--text-secondary)]">Sucursales</span>
-                    <textarea
-                      className="min-h-[120px] w-full rounded-2xl border border-[var(--border-soft)] bg-[var(--panel-muted)] px-4 py-3 text-[var(--text-primary)] outline-none transition focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent-soft)]"
-                      onChange={(event) => setEditTenantForm((current) => ({ ...current, branchesText: event.target.value }))}
-                      value={editTenantForm.branchesText}
-                    />
-                  </label>
+                </div>
+
+                <div className="rounded-[22px] border border-[var(--border-soft)] bg-[var(--panel-muted)] p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[var(--accent-strong)]">Sucursales</p>
+                      <p className="mt-2 text-sm text-[var(--text-secondary)]">
+                        Editá datos operativos, alias del QR y estado de cada sucursal.
+                      </p>
+                    </div>
+                    <button
+                      className="rounded-full border border-[var(--border-soft)] bg-[var(--panel)] px-4 py-2 text-sm font-semibold text-[var(--text-primary)] transition hover:border-[var(--accent-strong)] hover:text-[var(--accent-strong)]"
+                      onClick={() => setEditBranchesDraft((current) => [...current, createDraftBranch(current.length)])}
+                      type="button"
+                    >
+                      Agregar sucursal
+                    </button>
+                  </div>
+
+                  <div className="mt-4 space-y-4">
+                    {editBranchesDraft.map((branch, branchIndex) => {
+                      const resolvedSlug = normalizeSlug(branch.slug || branch.name);
+                      return (
+                        <div className="rounded-[20px] border border-[var(--border-soft)] bg-[var(--panel)] p-4" key={branch.id}>
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-semibold text-[var(--text-primary)]">Sucursal {branchIndex + 1}</p>
+                              <p className="mt-1 text-xs text-[var(--text-secondary)]">/{resolvedSlug || 'sin-alias'}</p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                className={`rounded-full border px-4 py-2 text-xs font-semibold transition ${
+                                  branch.active !== false
+                                    ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-600'
+                                    : 'border-[var(--border-soft)] bg-[var(--panel-muted)] text-[var(--text-secondary)]'
+                                }`}
+                                onClick={() => setEditBranchesDraft((current) => current.map((item) => item.id === branch.id ? { ...item, active: item.active === false } : item))}
+                                type="button"
+                              >
+                                {branch.active !== false ? 'Activa' : 'Pausada'}
+                              </button>
+                              <button
+                                className="rounded-full border border-rose-400/30 bg-rose-400/10 px-4 py-2 text-xs font-semibold text-rose-600 disabled:cursor-not-allowed disabled:opacity-50"
+                                disabled={editBranchesDraft.length === 1}
+                                onClick={() => setEditBranchesDraft((current) => current.filter((item) => item.id !== branch.id))}
+                                type="button"
+                              >
+                                Quitar
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="mt-4 grid gap-4 md:grid-cols-2">
+                            <label className="space-y-2">
+                              <span className="text-sm text-[var(--text-secondary)]">Nombre</span>
+                              <input
+                                className="w-full rounded-2xl border border-[var(--border-soft)] bg-[var(--panel-muted)] px-4 py-3 text-[var(--text-primary)] outline-none transition focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent-soft)]"
+                                onChange={(event) => setEditBranchesDraft((current) => current.map((item) => item.id === branch.id ? { ...item, name: event.target.value, slug: item.slug || normalizeSlug(event.target.value) } : item))}
+                                placeholder="Sucursal Central"
+                                type="text"
+                                value={branch.name}
+                              />
+                            </label>
+
+                            <label className="space-y-2">
+                              <span className="text-sm text-[var(--text-secondary)]">Alias QR</span>
+                              <input
+                                className="w-full rounded-2xl border border-[var(--border-soft)] bg-[var(--panel-muted)] px-4 py-3 text-[var(--text-primary)] outline-none transition focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent-soft)]"
+                                onChange={(event) => setEditBranchesDraft((current) => current.map((item) => item.id === branch.id ? { ...item, slug: normalizeSlug(event.target.value) } : item))}
+                                placeholder="sucursal-central"
+                                type="text"
+                                value={branch.slug || resolvedSlug}
+                              />
+                            </label>
+                          </div>
+
+                          <div className="mt-4 grid gap-4 md:grid-cols-3">
+                            <label className="space-y-2">
+                              <span className="text-sm text-[var(--text-secondary)]">Dirección</span>
+                              <input
+                                className="w-full rounded-2xl border border-[var(--border-soft)] bg-[var(--panel-muted)] px-4 py-3 text-[var(--text-primary)] outline-none transition focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent-soft)]"
+                                onChange={(event) => setEditBranchesDraft((current) => current.map((item) => item.id === branch.id ? { ...item, address: event.target.value } : item))}
+                                placeholder="Av. Siempre Viva 123"
+                                type="text"
+                                value={branch.address}
+                              />
+                            </label>
+
+                            <label className="space-y-2">
+                              <span className="text-sm text-[var(--text-secondary)]">Teléfono</span>
+                              <input
+                                className="w-full rounded-2xl border border-[var(--border-soft)] bg-[var(--panel-muted)] px-4 py-3 text-[var(--text-primary)] outline-none transition focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent-soft)]"
+                                inputMode="tel"
+                                onChange={(event) => setEditBranchesDraft((current) => current.map((item) => item.id === branch.id ? { ...item, phone: event.target.value } : item))}
+                                placeholder="11 5555 5555"
+                                type="tel"
+                                value={branch.phone}
+                              />
+                            </label>
+
+                            <label className="space-y-2">
+                              <span className="text-sm text-[var(--text-secondary)]">Responsable</span>
+                              <input
+                                className="w-full rounded-2xl border border-[var(--border-soft)] bg-[var(--panel-muted)] px-4 py-3 text-[var(--text-primary)] outline-none transition focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent-soft)]"
+                                onChange={(event) => setEditBranchesDraft((current) => current.map((item) => item.id === branch.id ? { ...item, contactName: event.target.value } : item))}
+                                placeholder="Nombre del encargado"
+                                type="text"
+                                value={branch.contactName}
+                              />
+                            </label>
+                          </div>
+
+                          <label className="mt-4 block space-y-2">
+                            <span className="text-sm text-[var(--text-secondary)]">Notas internas</span>
+                            <textarea
+                              className="min-h-[88px] w-full rounded-2xl border border-[var(--border-soft)] bg-[var(--panel-muted)] px-4 py-3 text-[var(--text-primary)] outline-none transition focus:border-[var(--accent-strong)] focus:ring-2 focus:ring-[var(--accent-soft)]"
+                              onChange={(event) => setEditBranchesDraft((current) => current.map((item) => item.id === branch.id ? { ...item, notes: event.target.value } : item))}
+                              placeholder="Horarios, referencias o indicaciones para operación."
+                              value={branch.notes}
+                            />
+                          </label>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 <button
