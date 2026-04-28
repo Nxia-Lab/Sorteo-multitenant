@@ -61,10 +61,7 @@ export async function uploadBrandLogoFile(file, scope = 'tenant') {
 
     return getDownloadURL(snapshot.ref);
   } catch (error) {
-    const code = String(error?.code || '');
-    const canFallbackToFirestore = ['storage/bucket-not-found', 'storage/unknown', 'storage/retry-limit-exceeded'].includes(code);
-
-    if (!canFallbackToFirestore || file.size > 512 * 1024) {
+    if (file.size > 512 * 1024) {
       throw error;
     }
 
