@@ -1,0 +1,48 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function profilePath(uid) {
+      return /databases/(default)/documents/users/$(uid);
+    }
+
+    function hasProfile() {
+      return signedIn() && firestore.exists(profilePath(request.auth.uid));
+    }
+
+    function profile() {
+      return firestore.get(profilePath(request.auth.uid)).data;
+    }
+
+    function isActiveUser() {
+      return hasProfile() && profile().active == true;
+    }
+
+    function isSuperAdmin() {
+      return isActiveUser() && profile().role == 'superadmin';
+    }
+
+    function canManageBranding(scope) {
+      return isSuperAdmin() || (
+        isActiveUser() &&
+        profile().role == 'tenant_admin' &&
+        profile().tenantId == scope
+      );
+    }
+
+    match /brand-logos/{scope}/{fileName} {
+      allow read: if true;
+      allow create, update: if canManageBranding(scope) &&
+        request.resource.size < 1024 * 1024 &&
+        request.resource.contentType.matches('image/.*');
+      allow delete: if canManageBranding(scope);
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

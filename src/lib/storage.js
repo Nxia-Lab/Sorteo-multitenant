@@ -1,3 +1,6 @@
+import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
+import { storage } from './firebase';
+
 function sanitizeSegment(value) {
   return String(value || '')
     .trim()
@@ -44,7 +47,27 @@ export async function uploadBrandLogoFile(file, scope = 'tenant') {
     throw new Error('El logo debe pesar menos de 1 MB.');
   }
 
-  const dataUrl = await readFileAsDataUrl(file);
+  const safeScope = sanitizeSegment(scope) || 'tenant';
+  const extension = sanitizeSegment(file.name.split('.').pop()) || 'image';
+  const logoRef = ref(storage, `brand-logos/${safeScope}/${randomId()}.${extension}`);
 
-  return dataUrl;
+  try {
+    const snapshot = await uploadBytes(logoRef, file, {
+      contentType: file.type,
+      customMetadata: {
+        scope: safeScope,
+      },
+    });
+
+    return getDownloadURL(snapshot.ref);
+  } catch (error) {
+    const code = String(error?.code || '');
+    const canFallbackToFirestore = ['storage/bucket-not-found', 'storage/unknown', 'storage/retry-limit-exceeded'].includes(code);
+
+    if (!canFallbackToFirestore || file.size > 512 * 1024) {
+      throw error;
+    }
+
+    return readFileAsDataUrl(file);
+  }
 }
