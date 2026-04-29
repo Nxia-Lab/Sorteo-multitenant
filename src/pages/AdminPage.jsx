@@ -472,6 +472,11 @@ export default function AdminPage() {
     }
   }
 
+  async function handleSignOut() {
+    await signOut(auth);
+    navigate('/', { replace: true });
+  }
+
   async function handleUpdatePlatformSettings(event) {
     event.preventDefault();
     setPlatformError('');
@@ -906,7 +911,7 @@ export default function AdminPage() {
           </button>
           <button
             className="inline-flex items-center rounded-full border border-[var(--border-soft)] bg-[var(--panel)] px-4 py-2 text-sm font-medium text-[var(--text-primary)] transition hover:border-[var(--accent-strong)] hover:text-[var(--accent-strong)]"
-            onClick={() => signOut(auth)}
+            onClick={handleSignOut}
             type="button"
           >
             Cerrar sesión
