@@ -1,5 +1,13 @@
 import { initializeApp, getApps } from 'firebase/app';
-import { createUserWithEmailAndPassword, deleteUser, getAuth, signOut, updateProfile } from 'firebase/auth';
+import {
+  createUserWithEmailAndPassword,
+  deleteUser,
+  getAuth,
+  inMemoryPersistence,
+  setPersistence,
+  signOut,
+  updateProfile,
+} from 'firebase/auth';
 import { collection, deleteDoc, doc, getDocsFromServer, query, serverTimestamp, setDoc } from 'firebase/firestore';
 import { db, firebaseConfig } from './firebase';
 import { validateStrongPassword } from './passwordPolicy';
@@ -7,11 +15,22 @@ import { createTenant } from './portal';
 import { ROLES } from './tenantModel';
 
 const PROVISIONING_APP_NAME = 'tenant-provisioning';
+let provisioningAuthPromise = null;
 
-function getProvisioningAuth() {
+async function getProvisioningAuth() {
+  if (provisioningAuthPromise) {
+    return provisioningAuthPromise;
+  }
+
   const existingApp = getApps().find((app) => app.name === PROVISIONING_APP_NAME);
   const app = existingApp || initializeApp(firebaseConfig, PROVISIONING_APP_NAME);
-  return getAuth(app);
+  const auth = getAuth(app);
+
+  provisioningAuthPromise = setPersistence(auth, inMemoryPersistence)
+    .catch(() => {})
+    .then(() => auth);
+
+  return provisioningAuthPromise;
 }
 
 async function rollbackTenant(tenantId) {
@@ -53,7 +72,7 @@ export async function createTenantAdminAccess({
     throw new Error('El tenantId es obligatorio para crear el acceso.');
   }
 
-  const auth = getProvisioningAuth();
+  const auth = await getProvisioningAuth();
   const credential = await createUserWithEmailAndPassword(auth, normalizedEmail, normalizedPassword);
 
   if (normalizedDisplayName) {
@@ -110,7 +129,7 @@ export async function createTenantWithAccess({
     throw new Error(`La contraseña temporal debe cumplir: ${passwordCheck.issues.join(' ')}`);
   }
 
-  const auth = getProvisioningAuth();
+  const auth = await getProvisioningAuth();
   const credential = await createUserWithEmailAndPassword(auth, accessEmail, accessPassword);
 
   try {
