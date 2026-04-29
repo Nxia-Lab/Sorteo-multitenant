@@ -494,7 +494,10 @@ export async function createTenantParticipant(tenantId, participant) {
     throw new Error('Necesitamos un sorteo para guardar al participante.');
   }
 
-  const participantId = `${raffleId}__${participantDni}`;
+  const chanceId = globalThis.crypto?.randomUUID
+    ? globalThis.crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  const participantId = `${raffleId}__${participantDni}__${chanceId}`;
 
   const payload = {
     tenantId,

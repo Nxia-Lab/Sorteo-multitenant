@@ -10,31 +10,6 @@ import {
   subscribeTenantRaffles,
 } from '../lib/portal';
 
-const COOLDOWN_MS = 30_000;
-
-function getCooldownKey(tenantId, raffleId, dni) {
-  return `raffle-cooldown:${tenantId}:${raffleId}:${dni}`;
-}
-
-function isBlockedByCooldown(tenantId, raffleId, dni) {
-  const raw = window.localStorage.getItem(getCooldownKey(tenantId, raffleId, dni));
-  if (!raw) {
-    return false;
-  }
-
-  const expiresAt = Number(raw);
-  if (Number.isNaN(expiresAt) || Date.now() > expiresAt) {
-    window.localStorage.removeItem(getCooldownKey(tenantId, raffleId, dni));
-    return false;
-  }
-
-  return true;
-}
-
-function startCooldown(tenantId, raffleId, dni) {
-  window.localStorage.setItem(getCooldownKey(tenantId, raffleId, dni), String(Date.now() + COOLDOWN_MS));
-}
-
 function isWithinWindow(startAt, endAt) {
   if (!startAt || !endAt) {
     return false;
@@ -169,11 +144,6 @@ export default function RegisterPage() {
       return;
     }
 
-    if (isBlockedByCooldown(tenantId, activeRaffle.id, dni)) {
-      setStatus({ type: 'error', message: 'Ese DNI acaba de enviarse. Esperá unos segundos para evitar duplicados accidentales.' });
-      return;
-    }
-
     try {
       setIsSubmitting(true);
       setStatus({ type: 'loading', message: '' });
@@ -191,13 +161,12 @@ export default function RegisterPage() {
         jornadaEndAt: activeRaffle.endAt?.toDate?.() || activeRaffle.endAt || new Date(),
       });
 
-      startCooldown(tenantId, activeRaffle.id, dni);
       setForm({ nombre: '', dni: '', telefono: '' });
       setFieldErrors({});
       setRegistrationComplete(true);
       setStatus({
         type: 'success',
-        message: `Tu participación en ${activeRaffle.name} quedó registrada para ${branchName}.`,
+        message: `Tu chance en ${activeRaffle.name} quedó registrada para ${branchName}.`,
       });
     } catch (error) {
       setStatus({
@@ -235,6 +204,16 @@ export default function RegisterPage() {
             <p className="mx-auto mt-3 max-w-md text-base leading-7 text-[var(--text-secondary)]">
               {status.message || 'Tu participación quedó registrada correctamente.'}
             </p>
+            <button
+              className="mt-6 inline-flex min-h-11 items-center justify-center rounded-full bg-gradient-to-r from-[var(--accent-blue)] to-[var(--accent-strong)] px-6 py-3 text-sm font-semibold text-white transition hover:scale-[1.01]"
+              onClick={() => {
+                setRegistrationComplete(false);
+                setStatus({ type: 'idle', message: '' });
+              }}
+              type="button"
+            >
+              Registrar otra compra
+            </button>
           </div>
         </div>
       ) : showStatusModal ? (
