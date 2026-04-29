@@ -337,6 +337,39 @@ export default function AdminPage() {
   }, [orderedTenants, selectedTenantSlug]);
 
   useEffect(() => {
+    setTenantMessage('');
+    setTenantError('');
+    setEditTenantMessage('');
+    setEditTenantError('');
+    setResetAccessMessage('');
+    setResetAccessError('');
+  }, [activeSection, selectedTenantSlug]);
+
+  useEffect(() => {
+    if (!tenantMessage) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setTenantMessage('');
+    }, 4500);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [tenantMessage]);
+
+  useEffect(() => {
+    if (!editTenantMessage) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setEditTenantMessage('');
+    }, 4500);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [editTenantMessage]);
+
+  useEffect(() => {
     const branding = platformSettings?.branding || {};
     setPlatformForm({
       brandingDisplayName: branding.displayName || defaultPlatformBranding.displayName,
