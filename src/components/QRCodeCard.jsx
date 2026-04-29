@@ -3,6 +3,8 @@ import QRCode from 'qrcode';
 
 export default function QRCodeCard({ branch, url }) {
   const [src, setSrc] = useState('');
+  const actionClassName =
+    'inline-flex min-h-11 items-center justify-center rounded-full border border-[var(--border-soft)] px-5 text-center text-xs font-semibold uppercase leading-none tracking-[0.2em] transition hover:border-[var(--accent-strong)] hover:bg-[var(--accent-soft)]';
 
   useEffect(() => {
     let cancelled = false;
@@ -94,14 +96,14 @@ export default function QRCodeCard({ branch, url }) {
       <p className="mt-4 break-all text-xs leading-5 text-[var(--text-secondary)]">{url}</p>
       <div className="mt-4 flex flex-col gap-3 sm:flex-row">
         <button
-          className="rounded-full border border-[var(--border-soft)] px-4 py-2 text-xs font-medium uppercase tracking-[0.2em] text-[var(--accent-strong)] transition hover:border-[var(--accent-strong)] hover:bg-[var(--accent-soft)]"
+          className={`${actionClassName} text-[var(--accent-strong)]`}
           onClick={copyLink}
           type="button"
         >
           Copiar link
         </button>
         <a
-          className="rounded-full border border-[var(--border-soft)] px-4 py-2 text-xs font-medium uppercase tracking-[0.2em] text-[var(--text-primary)] transition hover:border-[var(--accent-strong)] hover:bg-[var(--accent-soft)]"
+          className={`${actionClassName} text-[var(--text-primary)]`}
           href={url}
           rel="noreferrer"
           target="_blank"
@@ -109,7 +111,7 @@ export default function QRCodeCard({ branch, url }) {
           Abrir
         </a>
         <button
-          className="rounded-full border border-[var(--border-soft)] px-4 py-2 text-xs font-medium uppercase tracking-[0.2em] text-[var(--text-primary)] transition hover:border-[var(--accent-strong)] hover:bg-[var(--accent-soft)]"
+          className={`${actionClassName} text-[var(--text-primary)]`}
           onClick={printQr}
           type="button"
         >
