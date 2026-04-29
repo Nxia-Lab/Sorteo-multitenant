@@ -94,22 +94,27 @@ export default function RegisterPage() {
     [branchSlug, branches],
   );
   const branchName = currentBranch ? getBranchDisplayName(currentBranch) : '';
-  const branchWindowRaffles = useMemo(
+  const branchRaffles = useMemo(
     () =>
       raffles.filter(
         (raffle) =>
+          raffle.status !== 'archived' &&
           Array.isArray(raffle.enabledBranches) &&
-          raffle.enabledBranches.includes(branchName) &&
-          isWithinWindow(raffle.startAt, raffle.endAt),
+          raffle.enabledBranches.includes(branchName),
       ),
     [branchName, raffles],
+  );
+  const branchWindowRaffles = useMemo(
+    () =>
+      branchRaffles.filter((raffle) => isWithinWindow(raffle.startAt, raffle.endAt)),
+    [branchRaffles],
   );
   const matchingRaffles = useMemo(
     () => branchWindowRaffles.filter((raffle) => raffle.status === 'active'),
     [branchWindowRaffles],
   );
   const activeRaffle = matchingRaffles[0] || null;
-  const displayRaffle = activeRaffle || branchWindowRaffles[0] || null;
+  const displayRaffle = activeRaffle || branchWindowRaffles[0] || branchRaffles[0] || null;
   const activeRaffleName = displayRaffle ? getRaffleDisplayName(displayRaffle) : 'Sorteo vigente';
   const bannerUrl = displayRaffle?.bannerUrl || displayRaffle?.imageUrl || tenant?.branding?.bannerUrl || '/sorteo-banner.jpeg';
   const hasConflict = matchingRaffles.length > 1;
