@@ -263,7 +263,8 @@ service cloud.firestore {
 
       match /branches/{branchId} {
         allow read: if true;
-        allow create, update, delete: if canManageTenant(tenantId) && validBranchDoc(request.resource.data, tenantId);
+        allow create, update: if canManageTenant(tenantId) && validBranchDoc(request.resource.data, tenantId);
+        allow delete: if canManageTenant(tenantId);
       }
 
       match /raffles/{raffleId} {
