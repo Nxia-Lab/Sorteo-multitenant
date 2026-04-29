@@ -23,6 +23,19 @@ function getBranchDisplayName(branch) {
   return String(branch?.name || branch?.slug || branch?.id || 'Sucursal').trim();
 }
 
+function getRaffleDisplayName(raffle) {
+  const candidates = [
+    raffle?.name,
+    raffle?.nombre,
+    raffle?.title,
+    raffle?.titulo,
+    raffle?.displayName,
+    raffle?.jornadaLabel,
+  ];
+
+  return candidates.map((value) => String(value || '').trim()).find(Boolean) || 'Sorteo vigente';
+}
+
 export default function RegisterPage() {
   const { tenantId = '', branchSlug = '' } = useParams();
   const [tenant, setTenant] = useState(null);
@@ -93,6 +106,7 @@ export default function RegisterPage() {
     [branchName, raffles],
   );
   const activeRaffle = matchingRaffles[0] || null;
+  const activeRaffleName = activeRaffle ? getRaffleDisplayName(activeRaffle) : 'Sorteo vigente';
   const bannerUrl = activeRaffle?.bannerUrl || activeRaffle?.imageUrl || tenant?.branding?.bannerUrl || '/sorteo-banner.jpeg';
   const hasConflict = matchingRaffles.length > 1;
   const isReady = Boolean(tenant?.status === 'active' && currentBranch?.active !== false && activeRaffle?.id && !hasConflict);
@@ -154,9 +168,9 @@ export default function RegisterPage() {
         telefono: trimmedPhone,
         sucursal: branchName,
         raffleId: activeRaffle.id,
-        raffleName: activeRaffle.name,
+        raffleName: activeRaffleName,
         jornadaKey: activeRaffle.id,
-        jornadaLabel: activeRaffle.name,
+        jornadaLabel: activeRaffleName,
         jornadaStartAt: activeRaffle.startAt?.toDate?.() || activeRaffle.startAt || new Date(),
         jornadaEndAt: activeRaffle.endAt?.toDate?.() || activeRaffle.endAt || new Date(),
       });
@@ -166,7 +180,7 @@ export default function RegisterPage() {
       setRegistrationComplete(true);
       setStatus({
         type: 'success',
-        message: `Tu chance en ${activeRaffle.name} quedó registrada para ${branchName}.`,
+        message: `Tu chance en ${activeRaffleName} quedó registrada para ${branchName}.`,
       });
     } catch (error) {
       setStatus({
@@ -189,7 +203,7 @@ export default function RegisterPage() {
       brandName={tenant?.branding?.displayName || tenant?.branding?.name || getTenantDisplayName(tenant)}
       description={branchName ? `Registro para ${branchName}.` : 'Escaneá el QR de tu sucursal.'}
       eyebrow="Registro de participante"
-      title={activeRaffle?.name || 'Sorteo vigente'}
+      title={activeRaffleName}
       topLabel={getTenantDisplayName(tenant)}
       topSubtitle={branchName || 'Sucursal'}
     >
@@ -244,7 +258,7 @@ export default function RegisterPage() {
           <div className="space-y-6">
           <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[var(--panel-muted)] shadow-[var(--card-shadow)]">
             <img
-              alt={activeRaffle?.name || 'Banner del sorteo'}
+              alt={activeRaffleName || 'Banner del sorteo'}
               className="h-auto max-h-[620px] min-h-[260px] w-full object-contain sm:min-h-[360px] lg:min-h-[460px]"
               src={bannerUrl}
             />
