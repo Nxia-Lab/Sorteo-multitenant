@@ -94,20 +94,24 @@ export default function RegisterPage() {
     [branchSlug, branches],
   );
   const branchName = currentBranch ? getBranchDisplayName(currentBranch) : '';
-  const matchingRaffles = useMemo(
+  const branchWindowRaffles = useMemo(
     () =>
       raffles.filter(
         (raffle) =>
-          raffle.status === 'active' &&
           Array.isArray(raffle.enabledBranches) &&
           raffle.enabledBranches.includes(branchName) &&
           isWithinWindow(raffle.startAt, raffle.endAt),
       ),
     [branchName, raffles],
   );
+  const matchingRaffles = useMemo(
+    () => branchWindowRaffles.filter((raffle) => raffle.status === 'active'),
+    [branchWindowRaffles],
+  );
   const activeRaffle = matchingRaffles[0] || null;
-  const activeRaffleName = activeRaffle ? getRaffleDisplayName(activeRaffle) : 'Sorteo vigente';
-  const bannerUrl = activeRaffle?.bannerUrl || activeRaffle?.imageUrl || tenant?.branding?.bannerUrl || '/sorteo-banner.jpeg';
+  const displayRaffle = activeRaffle || branchWindowRaffles[0] || null;
+  const activeRaffleName = displayRaffle ? getRaffleDisplayName(displayRaffle) : 'Sorteo vigente';
+  const bannerUrl = displayRaffle?.bannerUrl || displayRaffle?.imageUrl || tenant?.branding?.bannerUrl || '/sorteo-banner.jpeg';
   const hasConflict = matchingRaffles.length > 1;
   const isReady = Boolean(tenant?.status === 'active' && currentBranch?.active !== false && activeRaffle?.id && !hasConflict);
   const showStatusModal = status.type !== 'idle' && status.type !== 'loading';
