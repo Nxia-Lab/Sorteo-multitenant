@@ -73,6 +73,16 @@ service cloud.firestore {
       userId.size() > 0;
     }
 
+    function validOwnPasswordStatusUpdate(data) {
+      return signedIn() &&
+      data.diff(resource.data).affectedKeys().hasOnly([
+        'mustChangePassword',
+        'updatedAt',
+      ]) &&
+      data.mustChangePassword == false &&
+      data.updatedAt is timestamp;
+    }
+
     function validTenantDoc(data) {
       return data.keys().hasOnly([
         'displayName',
@@ -246,7 +256,9 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow read: if signedIn() && (request.auth.uid == userId || isSuperAdmin());
-      allow create, update, delete: if isSuperAdmin() && validUserDoc(request.resource.data, userId);
+      allow create, delete: if isSuperAdmin() && validUserDoc(request.resource.data, userId);
+      allow update: if (isSuperAdmin() && validUserDoc(request.resource.data, userId)) ||
+        (request.auth.uid == userId && validOwnPasswordStatusUpdate(request.resource.data));
     }
 
     match /tenants/{tenantId} {
