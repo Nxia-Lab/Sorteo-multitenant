@@ -204,16 +204,6 @@ export default function RegisterPage() {
             <p className="mx-auto mt-3 max-w-md text-base leading-7 text-[var(--text-secondary)]">
               {status.message || 'Tu participación quedó registrada correctamente.'}
             </p>
-            <button
-              className="mt-6 inline-flex min-h-11 items-center justify-center rounded-full bg-gradient-to-r from-[var(--accent-blue)] to-[var(--accent-strong)] px-6 py-3 text-sm font-semibold text-white transition hover:scale-[1.01]"
-              onClick={() => {
-                setRegistrationComplete(false);
-                setStatus({ type: 'idle', message: '' });
-              }}
-              type="button"
-            >
-              Registrar otra compra
-            </button>
           </div>
         </div>
       ) : showStatusModal ? (
