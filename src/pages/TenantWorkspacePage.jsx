@@ -23,6 +23,7 @@ import {
   updateTenantRaffle,
 } from '../lib/portal';
 import { validateStrongPassword } from '../lib/passwordPolicy';
+import { buildDrawResult, buildExportableCustomers, getOperationalRaffleStatus, getRaffleStatusLabel } from '../lib/raffleLogic';
 import { uploadBrandLogoFile } from '../lib/storage';
 import { getRoleLabel, ROLES } from '../lib/tenantModel';
 
@@ -74,19 +75,6 @@ function countRaffleParticipants(participants, raffleId) {
   return participants.filter((participant) => participant.raffleId === raffleId).length;
 }
 
-function toMillis(value) {
-  if (!value) {
-    return 0;
-  }
-
-  const date = typeof value?.toDate === 'function' ? value.toDate() : new Date(value);
-  return Number.isNaN(date.getTime()) ? 0 : date.getTime();
-}
-
-function getParticipantDate(participant) {
-  return participant?.timestamp || participant?.createdAt || participant?.jornadaStartAt || null;
-}
-
 function sanitizeFilename(value) {
   return String(value || 'empresa')
     .normalize('NFD')
@@ -94,19 +82,6 @@ function sanitizeFilename(value) {
     .replace(/[^a-zA-Z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .toLowerCase() || 'empresa';
-}
-
-function getRaffleStatusLabel(status) {
-  const labels = {
-    draft: 'Borrador',
-    active: 'Activo',
-    paused: 'Pausado',
-    manual_closed: 'Cerrado manualmente',
-    expired: 'Finalizado',
-    completed: 'Sorteado',
-  };
-
-  return labels[status] || 'Borrador';
 }
 
 export default function TenantWorkspacePage() {
@@ -197,59 +172,7 @@ export default function TenantWorkspacePage() {
 
     return tenantParticipants.filter((participant) => participant.raffleId === selectedParticipantRaffle.id);
   }, [selectedParticipantRaffle, tenantParticipants]);
-  const exportableCustomers = useMemo(() => {
-    const customersByDni = new Map();
-
-    tenantParticipants.forEach((participant) => {
-      const dni = String(participant?.dni || '').trim();
-      if (!dni) {
-        return;
-      }
-
-      const existing = customersByDni.get(dni);
-      const participantDate = getParticipantDate(participant);
-      const participantMillis = toMillis(participantDate);
-      const branch = String(participant?.sucursal || '').trim();
-
-      if (!existing) {
-        customersByDni.set(dni, {
-          dni,
-          nombre: participant?.nombre || '',
-          telefono: participant?.telefono || '',
-          sucursal: branch,
-          sucursales: new Set(branch ? [branch] : []),
-          participaciones: 1,
-          ultimoSorteo: participant?.raffleName || participant?.jornadaLabel || '',
-          ultimaParticipacion: participantDate,
-          ultimaParticipacionMillis: participantMillis,
-        });
-        return;
-      }
-
-      existing.participaciones += 1;
-      if (branch) {
-        existing.sucursales.add(branch);
-      }
-
-      if (participantMillis >= existing.ultimaParticipacionMillis) {
-        existing.nombre = participant?.nombre || existing.nombre;
-        existing.telefono = participant?.telefono || existing.telefono;
-        existing.sucursal = branch || existing.sucursal;
-        existing.ultimoSorteo = participant?.raffleName || participant?.jornadaLabel || existing.ultimoSorteo;
-        existing.ultimaParticipacion = participantDate || existing.ultimaParticipacion;
-        existing.ultimaParticipacionMillis = participantMillis;
-      }
-    });
-
-    return Array.from(customersByDni.values()).sort((first, second) => {
-      const branchCompare = String(first.sucursal || '').localeCompare(String(second.sucursal || ''), 'es');
-      if (branchCompare !== 0) {
-        return branchCompare;
-      }
-
-      return String(first.nombre || '').localeCompare(String(second.nombre || ''), 'es');
-    });
-  }, [tenantParticipants]);
+  const exportableCustomers = useMemo(() => buildExportableCustomers(tenantParticipants), [tenantParticipants]);
   const requiresPasswordChange = Boolean(profile?.mustChangePassword && profile?.role !== ROLES.SUPERADMIN);
 
   const drawPreviewPicks = useMemo(() => {
@@ -787,92 +710,6 @@ export default function TenantWorkspacePage() {
     setRaffleMessage('');
   }
 
-  function shuffleItems(items) {
-    return [...items]
-      .map((item) => ({ item, order: Math.random() }))
-      .sort((first, second) => first.order - second.order)
-      .map(({ item }) => item);
-  }
-
-  function getParticipantDni(participant) {
-    return String(participant?.dni || participant?.id || '').trim();
-  }
-
-  function countUniqueParticipants(participants, usedDnis = new Set()) {
-    return participants.reduce((count, participant) => {
-      const dni = getParticipantDni(participant);
-      if (!dni || usedDnis.has(dni)) {
-        return count;
-      }
-
-      usedDnis.add(dni);
-      return count + 1;
-    }, 0);
-  }
-
-  function pickUniqueParticipants(participants, amount, usedDnis) {
-    const pickedParticipants = [];
-
-    for (const participant of shuffleItems(participants)) {
-      const dni = getParticipantDni(participant);
-      if (!dni || usedDnis.has(dni)) {
-        continue;
-      }
-
-      pickedParticipants.push(participant);
-      usedDnis.add(dni);
-
-      if (pickedParticipants.length >= amount) {
-        break;
-      }
-    }
-
-    return pickedParticipants;
-  }
-
-  function buildDrawResult(raffle, participants, mode, winnersPerGroup, alternatesPerGroup) {
-    const eligibleParticipants = participants.filter((participant) => participant.raffleId === raffle.id);
-    const groups = mode === 'branch'
-      ? (raffle.enabledBranches || []).map((branchName) => ({
-          label: branchName,
-          participants: eligibleParticipants.filter((participant) => participant.sucursal === branchName),
-        }))
-      : [
-          {
-            label: 'Global',
-            participants: eligibleParticipants,
-          },
-        ];
-
-    const selectedDnis = new Set();
-
-    return groups.map((group) => {
-      const eligibleCount = countUniqueParticipants(group.participants, new Set(selectedDnis));
-      const winners = pickUniqueParticipants(group.participants, winnersPerGroup, selectedDnis);
-      const alternates = pickUniqueParticipants(group.participants, alternatesPerGroup, selectedDnis);
-
-      return {
-        group: group.label,
-        eligibleCount,
-        chanceCount: group.participants.length,
-        winners: winners.map((participant) => ({
-          id: participant.id,
-          dni: participant.dni,
-          nombre: participant.nombre,
-          telefono: participant.telefono,
-          sucursal: participant.sucursal,
-        })),
-        alternates: alternates.map((participant) => ({
-          id: participant.id,
-          dni: participant.dni,
-          nombre: participant.nombre,
-          telefono: participant.telefono,
-          sucursal: participant.sucursal,
-        })),
-      };
-    });
-  }
-
   async function handleCreateTenantParticipant(event) {
     event.preventDefault();
     setParticipantError('');
@@ -1104,6 +941,13 @@ export default function TenantWorkspacePage() {
     setRaffleMessage('');
 
     try {
+      if (nextStatus === 'active') {
+        const confirmed = window.confirm(`¿Activar el sorteo "${raffle.name}"? Los QR de las sucursales habilitadas van a empezar a aceptar registros cuando esté dentro de fecha.`);
+        if (!confirmed) {
+          return;
+        }
+      }
+
       await updateTenantRaffle(tenantId, raffle.id, {
         status: nextStatus,
       });
@@ -1617,6 +1461,7 @@ export default function TenantWorkspacePage() {
                               const drawInProgress = drawRaffleId === raffle.id;
                               const raffleParticipantCount = countRaffleParticipants(tenantParticipants, raffle.id);
                               const canStartDraw = canDrawToday && raffleParticipantCount > 0;
+                              const operationalStatus = getOperationalRaffleStatus(raffle);
 
                               return (
                                 <>
@@ -1632,7 +1477,7 @@ export default function TenantWorkspacePage() {
                                 ) : null}
                               </div>
                               <span className="rounded-full border border-[var(--border-soft)] bg-[var(--panel-muted)] px-3 py-1 text-xs font-medium text-[var(--text-secondary)]">
-                                {getRaffleStatusLabel(raffle.status)}
+                                {getRaffleStatusLabel(operationalStatus)}
                               </span>
                             </div>
 
@@ -1662,7 +1507,7 @@ export default function TenantWorkspacePage() {
                                 onClick={() => handleToggleTenantRaffleStatus(raffle)}
                                 type="button"
                               >
-                                {raffle.status === 'active' ? 'Pausar' : 'Activar'}
+                                {raffle.status === 'active' ? 'Pausar' : 'Activar sorteo'}
                               </button>
                               <button
                                 className="rounded-full border border-[var(--accent-strong)] bg-[var(--accent-soft)] px-4 py-2 text-sm font-semibold text-[var(--accent-strong)] transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-50"

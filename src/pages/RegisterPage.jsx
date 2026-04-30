@@ -3,37 +3,15 @@ import { useParams } from 'react-router-dom';
 import LoadingDots from '../components/LoadingDots';
 import Shell from '../components/Shell';
 import {
-  createTenantParticipant,
   getTenantDisplayName,
   subscribeTenant,
   subscribeTenantBranches,
   subscribeTenantRaffles,
 } from '../lib/portal';
-
-function isWithinWindow(startAt, endAt) {
-  if (!startAt || !endAt) {
-    return false;
-  }
-
-  const now = Date.now();
-  return now >= new Date(startAt?.toDate?.() || startAt).getTime() && now <= new Date(endAt?.toDate?.() || endAt).getTime();
-}
+import { getRaffleDisplayName, isWithinWindow } from '../lib/raffleLogic';
 
 function getBranchDisplayName(branch) {
   return String(branch?.name || branch?.slug || branch?.id || 'Sucursal').trim();
-}
-
-function getRaffleDisplayName(raffle) {
-  const candidates = [
-    raffle?.name,
-    raffle?.nombre,
-    raffle?.title,
-    raffle?.titulo,
-    raffle?.displayName,
-    raffle?.jornadaLabel,
-  ];
-
-  return candidates.map((value) => String(value || '').trim()).find(Boolean) || 'Sorteo vigente';
 }
 
 export default function RegisterPage() {
@@ -171,25 +149,31 @@ export default function RegisterPage() {
       setIsSubmitting(true);
       setStatus({ type: 'loading', message: '' });
 
-      await createTenantParticipant(tenantId, {
-        dni,
-        nombre: trimmedName,
-        telefono: trimmedPhone,
-        sucursal: branchName,
-        raffleId: activeRaffle.id,
-        raffleName: activeRaffleName,
-        jornadaKey: activeRaffle.id,
-        jornadaLabel: activeRaffleName,
-        jornadaStartAt: activeRaffle.startAt?.toDate?.() || activeRaffle.startAt || new Date(),
-        jornadaEndAt: activeRaffle.endAt?.toDate?.() || activeRaffle.endAt || new Date(),
+      const response = await fetch('/api/register-participant', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          tenantId,
+          branchSlug,
+          dni,
+          nombre: trimmedName,
+          telefono: trimmedPhone,
+        }),
       });
+      const payload = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(payload?.error || 'No pudimos guardar la inscripción. Intentá otra vez.');
+      }
 
       setForm({ nombre: '', dni: '', telefono: '' });
       setFieldErrors({});
       setRegistrationComplete(true);
       setStatus({
         type: 'success',
-        message: `Tu chance en ${activeRaffleName} quedó registrada para ${branchName}.`,
+        message: payload?.message || `Tu chance en ${activeRaffleName} quedó registrada para ${branchName}.`,
       });
     } catch (error) {
       setStatus({
