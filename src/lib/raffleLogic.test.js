@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   buildDrawResult,
   buildExportableCustomers,
+  buildRaffleMonitor,
+  createReportHash,
   getOperationalRaffleStatus,
   getRaffleDisplayName,
   isWithinWindow,
@@ -66,5 +68,32 @@ describe('raffle logic', () => {
     expect(customers[0].participaciones).toBe(2);
     expect(customers[0].nombre).toBe('Ana Actualizada');
     expect([...customers[0].sucursales].sort()).toEqual(['Centro', 'Norte']);
+  });
+
+  it('builds live monitor totals and branch alerts', () => {
+    const monitor = buildRaffleMonitor(
+      { id: 'raffle-1' },
+      [
+        { id: 'a', raffleId: 'raffle-1', dni: '1', nombre: 'Ana', sucursal: 'Centro', timestamp: '2026-04-30T09:10:00' },
+        { id: 'b', raffleId: 'raffle-1', dni: '2', nombre: 'Beto', sucursal: 'Centro', timestamp: '2026-04-30T10:20:00' },
+      ],
+      [{ name: 'Centro' }, { name: 'Norte' }],
+      new Date('2026-04-30T11:00:00'),
+    );
+
+    expect(monitor.todayCount).toBe(2);
+    expect(monitor.byBranch.find((branch) => branch.branchName === 'Centro')?.todayCount).toBe(2);
+    expect(monitor.byBranch.find((branch) => branch.branchName === 'Norte')?.alert).toBe(true);
+    expect(monitor.hourly).toEqual([
+      { hour: '09:00', count: 1 },
+      { hour: '10:00', count: 1 },
+    ]);
+  });
+
+  it('generates a stable report hash', () => {
+    const raffle = { id: 'raffle-1', name: 'Promo', result: { groups: [{ group: 'Global' }] } };
+
+    expect(createReportHash(raffle, raffle.result)).toBe(createReportHash(raffle, raffle.result));
+    expect(createReportHash(raffle, raffle.result)).toMatch(/^RPT-[0-9A-F]{8}$/);
   });
 });

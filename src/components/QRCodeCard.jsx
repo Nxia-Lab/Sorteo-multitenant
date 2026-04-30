@@ -107,8 +107,9 @@ export default function QRCodeCard({ branch, url }) {
           href={url}
           rel="noreferrer"
           target="_blank"
+          title="Ver la pantalla pública que abre este QR"
         >
-          Abrir
+          Vista cliente
         </a>
         <button
           className={`${actionClassName} text-[var(--text-primary)]`}

@@ -239,3 +239,81 @@ export function buildExportableCustomers(participants) {
     return String(first.nombre || '').localeCompare(String(second.nombre || ''), 'es');
   });
 }
+
+export function startOfLocalDay(date = new Date()) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+export function getHourKey(value) {
+  const date = normalizeDate(value);
+  if (!date || Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  return `${String(date.getHours()).padStart(2, '0')}:00`;
+}
+
+export function buildRaffleMonitor(raffle, participants, branches, now = new Date()) {
+  const raffleParticipants = participants.filter((participant) => participant.raffleId === raffle?.id);
+  const todayStart = startOfLocalDay(now).getTime();
+  const todayParticipants = raffleParticipants.filter((participant) => toMillis(participantDate(participant)) >= todayStart);
+  const branchNames = (branches || [])
+    .map((branch) => String(branch?.name || branch?.slug || branch?.id || '').trim())
+    .filter(Boolean);
+  const byBranch = branchNames.map((branchName) => {
+    const branchParticipants = todayParticipants.filter((participant) => String(participant?.sucursal || '').trim() === branchName);
+    const latestMillis = branchParticipants.reduce(
+      (latest, participant) => Math.max(latest, toMillis(participantDate(participant))),
+      0,
+    );
+    const hoursSinceLast = latestMillis ? (now.getTime() - latestMillis) / (60 * 60 * 1000) : Infinity;
+
+    return {
+      branchName,
+      todayCount: branchParticipants.length,
+      latestAt: latestMillis ? new Date(latestMillis) : null,
+      alert: branchParticipants.length === 0 || hoursSinceLast >= 4,
+    };
+  });
+  const hourlyMap = new Map();
+
+  todayParticipants.forEach((participant) => {
+    const hourKey = getHourKey(participantDate(participant));
+    if (hourKey) {
+      hourlyMap.set(hourKey, (hourlyMap.get(hourKey) || 0) + 1);
+    }
+  });
+
+  const hourly = Array.from(hourlyMap.entries())
+    .sort(([first], [second]) => first.localeCompare(second))
+    .map(([hour, count]) => ({ hour, count }));
+  const latest = [...raffleParticipants]
+    .sort((first, second) => toMillis(participantDate(second)) - toMillis(participantDate(first)))
+    .slice(0, 6);
+
+  return {
+    totalCount: raffleParticipants.length,
+    todayCount: todayParticipants.length,
+    byBranch,
+    hourly,
+    latest,
+    alerts: byBranch.filter((branch) => branch.alert),
+  };
+}
+
+export function createReportHash(raffle, result) {
+  const source = JSON.stringify({
+    raffleId: raffle?.id || '',
+    raffleName: raffle?.name || '',
+    completedAt: raffle?.completedAt || '',
+    result: result || raffle?.result || null,
+  });
+  let hash = 0x811c9dc5;
+
+  for (let index = 0; index < source.length; index += 1) {
+    hash ^= source.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+
+  return `RPT-${(hash >>> 0).toString(16).toUpperCase().padStart(8, '0')}`;
+}
