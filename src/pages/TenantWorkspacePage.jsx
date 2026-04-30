@@ -4,6 +4,7 @@ import { doc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { useNavigate, useParams } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import Card from '../components/Card';
+import ConfirmDialog from '../components/ConfirmDialog';
 import LoadingDots from '../components/LoadingDots';
 import QRCodeCard from '../components/QRCodeCard';
 import Shell from '../components/Shell';
@@ -121,6 +122,8 @@ export default function TenantWorkspacePage() {
   const [drawRevealCount, setDrawRevealCount] = useState(0);
   const [drawRolling, setDrawRolling] = useState(false);
   const [drawConfirmOpen, setDrawConfirmOpen] = useState(false);
+  const [statusConfirmRaffle, setStatusConfirmRaffle] = useState(null);
+  const [statusUpdating, setStatusUpdating] = useState(false);
   const [selectedBranchNames, setSelectedBranchNames] = useState([]);
   const [participantName, setParticipantName] = useState('');
   const [participantDni, setParticipantDni] = useState('');
@@ -1056,25 +1059,27 @@ export default function TenantWorkspacePage() {
     }
   }
 
-  async function handleToggleTenantRaffleStatus(raffle) {
+  async function handleToggleTenantRaffleStatus(raffle, { confirmed = false } = {}) {
     const nextStatus = raffle.status === 'active' ? 'paused' : 'active';
     setRaffleError('');
     setRaffleMessage('');
 
     try {
-      if (nextStatus === 'active') {
-        const confirmed = window.confirm(`¿Activar el sorteo "${raffle.name}"? Los QR de las sucursales habilitadas van a empezar a aceptar registros cuando esté dentro de fecha.`);
-        if (!confirmed) {
-          return;
-        }
+      if (nextStatus === 'active' && !confirmed) {
+        setStatusConfirmRaffle(raffle);
+        return;
       }
 
+      setStatusUpdating(true);
       await updateTenantRaffle(tenantId, raffle.id, {
         status: nextStatus,
       });
+      setStatusConfirmRaffle(null);
       setRaffleMessage(`Sorteo ${raffle.name} actualizado a ${getRaffleStatusLabel(nextStatus).toLowerCase()}.`);
     } catch (updateError) {
       setRaffleError(updateError?.message || 'No pudimos actualizar el sorteo.');
+    } finally {
+      setStatusUpdating(false);
     }
   }
 
@@ -1369,6 +1374,23 @@ export default function TenantWorkspacePage() {
           </div>
         </div>
       ) : null}
+
+      <ConfirmDialog
+        cancelLabel="Cancelar"
+        confirmLabel="Activar sorteo"
+        description={statusConfirmRaffle ? 'Los QR de las sucursales habilitadas van a aceptar registros cuando el sorteo esté dentro de fecha. Revisá fechas y sucursales antes de continuar.' : ''}
+        details={statusConfirmRaffle ? [
+          { label: 'Sorteo', value: statusConfirmRaffle.name },
+          { label: 'Sucursales', value: String(statusConfirmRaffle.enabledBranches?.length || 0) },
+          { label: 'Estado', value: getRaffleStatusLabel(getOperationalRaffleStatus(statusConfirmRaffle)) },
+        ] : []}
+        eyebrow="Activar campaña"
+        loading={statusUpdating}
+        onCancel={() => setStatusConfirmRaffle(null)}
+        onConfirm={() => handleToggleTenantRaffleStatus(statusConfirmRaffle, { confirmed: true })}
+        open={Boolean(statusConfirmRaffle)}
+        title={statusConfirmRaffle ? `¿Activar "${statusConfirmRaffle.name}"?` : ''}
+      />
 
       <div className="grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)]">
         <aside className="space-y-6">
